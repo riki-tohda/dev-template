@@ -1,0 +1,123 @@
+name: PR Changelog
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  pr-changelog:
+    name: Generate PR Detail Log
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Get PR Details
+        id: pr-details
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+
+            // Get commits
+            const commits = await github.rest.pulls.listCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number
+            });
+
+            // Get files
+            const files = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number
+            });
+
+            return {
+              number: pr.number,
+              title: pr.title,
+              body: pr.body || '',
+              author: pr.user.login,
+              merged_at: pr.merged_at,
+              commits: commits.data.map(c => ({
+                sha: c.sha.slice(0, 7),
+                message: c.commit.message.split('\n')[0]
+              })),
+              files: files.data.map(f => ({
+                name: f.filename,
+                status: f.status,
+                additions: f.additions,
+                deletions: f.deletions
+              })),
+              additions: files.data.reduce((sum, f) => sum + f.additions, 0),
+              deletions: files.data.reduce((sum, f) => sum + f.deletions, 0)
+            };
+
+      - name: Generate PR Log File
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const details = ${{ steps.pr-details.outputs.result }};
+            const mergedAt = new Date(details.merged_at);
+            const dateStr = mergedAt.toISOString().split('T')[0];
+
+            // Ensure directory exists
+            const prDir = 'docs/更新履歴/pr';
+            if (!fs.existsSync(prDir)) {
+              fs.mkdirSync(prDir, { recursive: true });
+            }
+
+            // Generate file content
+            let content = `# PR #${details.number}: ${details.title}\n\n`;
+            content += `| Item | Value |\n`;
+            content += `|------|-------|\n`;
+            content += `| PR Number | #${details.number} |\n`;
+            content += `| Author | @${details.author} |\n`;
+            content += `| Merged | ${dateStr} |\n`;
+            content += `| Changes | +${details.additions}/-${details.deletions} |\n\n`;
+
+            content += `## Description\n\n`;
+            content += details.body || '_No description provided_';
+            content += `\n\n`;
+
+            content += `## Commits\n\n`;
+            for (const commit of details.commits) {
+              content += `- \`${commit.sha}\` ${commit.message}\n`;
+            }
+            content += `\n`;
+
+            content += `## Changed Files\n\n`;
+            content += `| File | Status | Changes |\n`;
+            content += `|------|--------|--------|\n`;
+            for (const file of details.files) {
+              const status = file.status === 'added' ? 'Added' :
+                             file.status === 'removed' ? 'Deleted' :
+                             file.status === 'renamed' ? 'Renamed' : 'Modified';
+              content += `| \`${file.name}\` | ${status} | +${file.additions}/-${file.deletions} |\n`;
+            }
+
+            const filename = `${dateStr}_PR${details.number}.md`;
+            const filepath = path.join(prDir, filename);
+            fs.writeFileSync(filepath, content);
+            console.log(`Created ${filepath}`);
+
+      - name: Commit and Push
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add docs/更新履歴/pr/
+          git diff --staged --quiet || git commit -m "docs: Add PR #${{ github.event.pull_request.number }} changelog"
+          git push

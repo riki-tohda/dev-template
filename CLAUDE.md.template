@@ -1,0 +1,101 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## プロジェクト情報
+
+<!-- TODO: プロジェクトの概要を記載 -->
+プロジェクトの概要・コマンド・アーキテクチャについては `README.md` を参照すること。
+
+## コーディング規約
+
+### 基本要件
+<!-- TODO: プロジェクトに合わせて修正 -->
+- Python 3.10以上
+- 型ヒント必須
+- Googleスタイルのdocstring
+- PEP 8準拠
+
+### 命名規則
+- 変数・関数名: `snake_case`
+- クラス名: `PascalCase`
+- 定数: `UPPERCASE_WITH_UNDERSCORES`
+
+### パス管理
+`pathlib`を使用する（文字列結合でのパス操作は避ける）
+
+```python
+# Good
+from pathlib import Path
+config_path = Path(__file__).parent / "configs" / "config.ini"
+
+# Bad
+config_path = os.path.join(os.path.dirname(__file__), "configs", "config.ini")
+```
+
+### エラー処理
+- 具体的な例外型を使用する（bare exceptを避ける）
+- エラーメッセージは具体的かつユーザーが理解できるものにする
+
+```python
+# Good
+try:
+    config = load_config(path)
+except FileNotFoundError:
+    logger.error(f"設定ファイルが見つかりません: {path}")
+    raise
+except yaml.YAMLError as e:
+    logger.error(f"YAML解析エラー: {e}")
+    raise ConfigurationError(f"設定ファイルの形式が不正です: {path}")
+
+# Bad
+try:
+    config = load_config(path)
+except:
+    print("エラー")
+```
+
+### 関数設計
+- 単一責任の原則に従う
+- 理想は30〜50行以内
+- 50行を超える場合は分割を検討する
+- 循環的複雑度を低く保つ
+- 可能な限りイミュータブルな設計を心がける
+
+## ドキュメント構成
+
+### docs/フォルダ構成
+
+<!-- TODO: プロジェクトに合わせて修正 -->
+```
+docs/
+├── アーカイブ/         # 大幅修正・廃止されたドキュメント
+├── 仕様書/             # 技術仕様・設計ドキュメント
+├── 更新履歴/           # PRマージ時に自動生成
+│   └── pr/             # PR別の更新履歴
+└── 要件定義/           # 要件定義書
+```
+
+## 動作方針
+
+### 問題発見時のプロセス
+1. 問題を発見したら**修正前に報告**し、認識が正しいか確認を取る
+2. 「〜が原因と考えられますが、この認識で正しいでしょうか？」の形式で確認
+3. 確認後に解決策を提示する
+
+### 解決策の提示形式
+複数の解決策がある場合は推奨案と代替案を提示する。修正内容は以下を明示：
+- ファイルパス
+- 修正前のコード
+- 修正後のコード
+- 変更理由
+
+### コードレビュー
+レビュー依頼時は以下の形式で評価：
+- 10点満点でスコアリング
+- 改善点を具体的に提示
+- 良い点も併記
+
+### 透明性
+- わからないことは「わからない」と答える
+- 疑問や確認事項があればすぐに質問する
