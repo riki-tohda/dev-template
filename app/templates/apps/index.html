@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}アプリケーション管理 - POL Portal{% endblock %}
+
+{% block content %}
+<h1>アプリケーション管理</h1>
+
+<button id="refresh-btn" class="outline">更新</button>
+
+<table>
+    <thead>
+        <tr>
+            <th>アプリ名</th>
+            <th>説明</th>
+            <th>ポート</th>
+            <th>状態</th>
+            <th>操作</th>
+        </tr>
+    </thead>
+    <tbody id="apps-table">
+        <tr>
+            <td colspan="5">読み込み中...</td>
+        </tr>
+    </tbody>
+</table>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const isAdmin = {{ 'true' if current_user.is_admin else 'false' }};
+
+    function getStatusBadge(status, installed) {
+        if (!installed) {
+            return '<span class="status-unknown">未インストール</span>';
+        }
+        const classes = {
+            'running': 'status-running',
+            'stopped': 'status-stopped',
+            'error': 'status-error',
+            'unknown': 'status-unknown'
+        };
+        const labels = {
+            'running': '実行中',
+            'stopped': '停止',
+            'error': 'エラー',
+            'unknown': '不明'
+        };
+        return `<span class="${classes[status] || 'status-unknown'}">${labels[status] || status}</span>`;
+    }
+
+    function loadApps() {
+        fetch('/apps/api/status')
+            .then(response => response.json())
+            .then(data => {
+                const tbody = document.getElementById('apps-table');
+                tbody.innerHTML = '';
+
+                data.forEach(app => {
+                    const tr = document.createElement('tr');
+                    let actions = '';
+
+                    if (!app.installed) {
+                        // 未インストール
+                        if (isAdmin) {
+                            actions = `<button class="outline" onclick="installApp('${app.id}')">インストール</button>`;
+                        } else {
+                            actions = '<span>-</span>';
+                        }
+                    } else {
+                        // インストール済み
+                        actions = `
+                            <div class="grid">
+                                <button class="outline secondary" onclick="appAction('${app.id}', 'start')" ${app.status === 'running' ? 'disabled' : ''}>起動</button>
+                                <button class="outline secondary" onclick="appAction('${app.id}', 'stop')" ${app.status === 'stopped' ? 'disabled' : ''}>停止</button>
+                                <button class="outline secondary" onclick="appAction('${app.id}', 'restart')">再起動</button>
+                            </div>
+                        `;
+                    }
+
+                    tr.innerHTML = `
+                        <td><a href="/apps/${app.id}"><strong>${app.name}</strong></a></td>
+                        <td>${app.description}</td>
+                        <td>${app.port}</td>
+                        <td>${getStatusBadge(app.status, app.installed)}${app.installed_version ? ' <small>(' + app.installed_version + ')</small>' : ''}</td>
+                        <td>${actions}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            })
+            .catch(error => {
+                console.error('アプリ状態の取得に失敗:', error);
+                document.getElementById('apps-table').innerHTML =
+                    '<tr><td colspan="5">取得に失敗しました</td></tr>';
+            });
+    }
+
+    window.appAction = function(appId, action) {
+        fetch(`/apps/api/${appId}/${action}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                loadApps();
+            } else {
+                alert('エラー: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('操作に失敗:', error);
+            alert('操作に失敗しました');
+        });
+    };
+
+    window.installApp = function(appId) {
+        if (!confirm('このアプリをインストールしますか？')) {
+            return;
+        }
+
+        fetch(`/apps/api/${appId}/install`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                loadApps();
+            } else {
+                alert('エラー: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('インストールに失敗:', error);
+            alert('インストールに失敗しました');
+        });
+    };
+
+    // 初期読み込み
+    loadApps();
+
+    // 更新ボタン
+    document.getElementById('refresh-btn').addEventListener('click', loadApps);
+});
+</script>
+{% endblock %}

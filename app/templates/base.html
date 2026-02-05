@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}POL Portal{% endblock %}</title>
+
+    <!-- Pico.css -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <!-- Header -->
+    <header class="container">
+        <nav>
+            <ul>
+                <li><strong>POL Portal</strong></li>
+            </ul>
+            <ul>
+                <li><a href="{{ url_for('dashboard.index') }}">ダッシュボード</a></li>
+                <li><a href="{{ url_for('resources.index') }}">リソース</a></li>
+                <li><a href="{{ url_for('apps.index') }}">アプリ管理</a></li>
+                {% if current_user.is_authenticated and current_user.is_admin %}
+                <li><a href="{{ url_for('settings.index') }}">設定</a></li>
+                {% endif %}
+            </ul>
+            <ul>
+                {% if current_user.is_authenticated %}
+                <li>{{ current_user.username }}</li>
+                <li><a href="{{ url_for('auth.logout') }}" role="button" class="outline">ログアウト</a></li>
+                {% else %}
+                <li><a href="{{ url_for('auth.login') }}" role="button">ログイン</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <article class="flash-{{ category }}">
+                    {{ message }}
+                </article>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="container">
+        <small>POL統合ポータル &copy; 2025</small>
+    </footer>
+
+    <!-- Custom JS -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

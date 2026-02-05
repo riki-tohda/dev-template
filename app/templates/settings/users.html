@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}ユーザー管理 - POL Portal{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ul>
+        <li><a href="{{ url_for('settings.index') }}">設定</a></li>
+        <li>ユーザー管理</li>
+    </ul>
+</nav>
+
+<h1>ユーザー管理</h1>
+
+<p>
+    <a href="{{ url_for('settings.users_add') }}" role="button">ユーザーを追加</a>
+</p>
+
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>ユーザー名</th>
+            <th>権限</th>
+            <th>状態</th>
+            <th>操作</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for user in users %}
+        <tr>
+            <td>{{ user.id }}</td>
+            <td><strong>{{ user.username }}</strong></td>
+            <td>
+                {% if user.role == 'admin' %}
+                <span class="status-running">管理者</span>
+                {% else %}
+                一般ユーザー
+                {% endif %}
+            </td>
+            <td>
+                {% if user.enabled %}
+                <span class="status-running">有効</span>
+                {% else %}
+                <span class="status-stopped">無効</span>
+                {% endif %}
+            </td>
+            <td>
+                <a href="{{ url_for('settings.users_edit', user_id=user.id) }}"
+                   role="button" class="outline secondary">編集</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

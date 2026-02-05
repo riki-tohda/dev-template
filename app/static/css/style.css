@@ -1,0 +1,123 @@
+/* POL Portal カスタムスタイル */
+
+/* 状態バッジ */
+.status-running {
+    color: var(--pico-ins-color, #2e7d32);
+    font-weight: bold;
+}
+
+.status-stopped {
+    color: var(--pico-secondary, #546e7a);
+}
+
+.status-error {
+    color: var(--pico-del-color, #c62828);
+    font-weight: bold;
+}
+
+.status-unknown {
+    color: var(--pico-muted-color, #7b8794);
+}
+
+/* フラッシュメッセージ */
+.flash-success {
+    background-color: var(--pico-ins-color, #2e7d32);
+    color: white;
+    padding: 1rem;
+    border-radius: var(--pico-border-radius);
+    margin-bottom: 1rem;
+}
+
+.flash-error {
+    background-color: var(--pico-del-color, #c62828);
+    color: white;
+    padding: 1rem;
+    border-radius: var(--pico-border-radius);
+    margin-bottom: 1rem;
+}
+
+.flash-warning {
+    background-color: var(--pico-mark-background-color, #fff3cd);
+    padding: 1rem;
+    border-radius: var(--pico-border-radius);
+    margin-bottom: 1rem;
+}
+
+.flash-info {
+    background-color: var(--pico-primary-background, #e3f2fd);
+    padding: 1rem;
+    border-radius: var(--pico-border-radius);
+    margin-bottom: 1rem;
+}
+
+/* ヘッダー */
+header.container {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--pico-muted-border-color);
+    margin-bottom: 2rem;
+}
+
+/* フッター */
+footer.container {
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--pico-muted-border-color);
+    text-align: center;
+}
+
+/* プログレスバー警告色 */
+progress[value]::-webkit-progress-value {
+    transition: width 0.3s ease;
+}
+
+progress.warning::-webkit-progress-value {
+    background-color: var(--pico-del-color, #c62828);
+}
+
+/* ディスクアイテム */
+.disk-item {
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--pico-muted-border-color);
+}
+
+.disk-item:last-child {
+    border-bottom: none;
+}
+
+/* ボタングリッド */
+.grid button {
+    margin: 0;
+}
+
+/* パンくずリスト */
+nav[aria-label="breadcrumb"] ul {
+    padding: 0;
+    margin-bottom: 1rem;
+}
+
+nav[aria-label="breadcrumb"] li {
+    display: inline;
+}
+
+nav[aria-label="breadcrumb"] li:not(:last-child)::after {
+    content: " / ";
+    color: var(--pico-muted-color);
+}
+
+/* 定義リスト */
+dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.5rem 1rem;
+}
+
+dt {
+    font-weight: bold;
+    color: var(--pico-muted-color);
+}
+
+dd {
+    margin: 0;
+}

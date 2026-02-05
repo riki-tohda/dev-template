@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}ダッシュボード - POL Portal{% endblock %}
+
+{% block content %}
+<h1>ダッシュボード</h1>
+
+<!-- リソース概要 -->
+<section>
+    <h2>リソース状況</h2>
+    <div class="grid">
+        <article>
+            <header>CPU</header>
+            <p>
+                <strong id="cpu-percent">--</strong>%
+            </p>
+            <progress id="cpu-progress" value="0" max="100"></progress>
+        </article>
+
+        <article>
+            <header>メモリ</header>
+            <p>
+                <strong id="memory-percent">--</strong>%
+                <small id="memory-detail"></small>
+            </p>
+            <progress id="memory-progress" value="0" max="100"></progress>
+        </article>
+
+        <article>
+            <header>ディスク</header>
+            <p>
+                <strong id="disk-percent">--</strong>%
+                <small id="disk-detail"></small>
+            </p>
+            <progress id="disk-progress" value="0" max="100"></progress>
+        </article>
+    </div>
+    <p><small>稼働時間: <span id="uptime">--</span></small></p>
+    <button id="refresh-resources" class="outline">更新</button>
+</section>
+
+<!-- アプリ状態 -->
+<section>
+    <h2>アプリケーション状態</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>アプリ名</th>
+                <th>状態</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody id="apps-table">
+            <tr>
+                <td colspan="3">読み込み中...</td>
+            </tr>
+        </tbody>
+    </table>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // リソース情報を取得
+    function loadResources() {
+        fetch('/resources/api/status')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('cpu-percent').textContent = data.cpu.percent.toFixed(1);
+                document.getElementById('cpu-progress').value = data.cpu.percent;
+
+                document.getElementById('memory-percent').textContent = data.memory.percent.toFixed(1);
+                document.getElementById('memory-detail').textContent =
+                    `(${data.memory.used_gb}GB / ${data.memory.total_gb}GB)`;
+                document.getElementById('memory-progress').value = data.memory.percent;
+
+                if (data.disks.length > 0) {
+                    const disk = data.disks[0];
+                    document.getElementById('disk-percent').textContent = disk.percent.toFixed(1);
+                    document.getElementById('disk-detail').textContent =
+                        `(${disk.used_gb}GB / ${disk.total_gb}GB)`;
+                    document.getElementById('disk-progress').value = disk.percent;
+                }
+
+                document.getElementById('uptime').textContent = data.system.uptime;
+            })
+            .catch(error => {
+                console.error('リソース情報の取得に失敗:', error);
+            });
+    }
+
+    // アプリ状態を取得
+    function loadApps() {
+        fetch('/apps/api/status')
+            .then(response => response.json())
+            .then(data => {
+                const tbody = document.getElementById('apps-table');
+                tbody.innerHTML = '';
+
+                data.forEach(app => {
+                    const tr = document.createElement('tr');
+                    const statusClass = app.status === 'running' ? 'status-running' :
+                                       app.status === 'stopped' ? 'status-stopped' : 'status-error';
+                    tr.innerHTML = `
+                        <td>${app.name}</td>
+                        <td><span class="${statusClass}">${app.status}</span></td>
+                        <td>
+                            <a href="/apps/${app.id}" role="button" class="outline secondary">詳細</a>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            })
+            .catch(error => {
+                console.error('アプリ状態の取得に失敗:', error);
+                document.getElementById('apps-table').innerHTML =
+                    '<tr><td colspan="3">取得に失敗しました</td></tr>';
+            });
+    }
+
+    // 初期読み込み
+    loadResources();
+    loadApps();
+
+    // 更新ボタン
+    document.getElementById('refresh-resources').addEventListener('click', loadResources);
+});
+</script>
+{% endblock %}

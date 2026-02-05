@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}サーバー設定 - POL Portal{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ul>
+        <li><a href="{{ url_for('settings.index') }}">設定</a></li>
+        <li>サーバー設定</li>
+    </ul>
+</nav>
+
+<h1>サーバー設定</h1>
+
+<article>
+    <form method="post">
+        <label for="host">
+            バインドアドレス
+            <input type="text" id="host" value="{{ settings.host }}" disabled>
+            <small>セキュリティ上、変更できません</small>
+        </label>
+
+        <label for="port">
+            ポート番号
+            <input type="number" id="port" name="port" value="{{ settings.port }}"
+                   min="1024" max="65535" required>
+            <small>1024-65535の範囲で指定。変更後は再起動が必要です。</small>
+        </label>
+
+        <button type="submit">保存</button>
+    </form>
+</article>
+{% endblock %}

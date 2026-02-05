@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}リソースモニタ - POL Portal{% endblock %}
+
+{% block content %}
+<h1>リソースモニタ</h1>
+
+<button id="refresh-btn" class="outline">更新</button>
+
+<!-- CPU -->
+<article>
+    <header>
+        <h2>CPU</h2>
+    </header>
+    <div class="grid">
+        <div>
+            <p>使用率: <strong id="cpu-percent">--</strong>%</p>
+            <progress id="cpu-progress" value="0" max="100"></progress>
+        </div>
+        <div>
+            <p>物理コア: <span id="cpu-count">--</span></p>
+            <p>論理コア: <span id="cpu-count-logical">--</span></p>
+        </div>
+    </div>
+</article>
+
+<!-- メモリ -->
+<article>
+    <header>
+        <h2>メモリ</h2>
+    </header>
+    <div class="grid">
+        <div>
+            <p>使用率: <strong id="memory-percent">--</strong>%</p>
+            <progress id="memory-progress" value="0" max="100"></progress>
+        </div>
+        <div>
+            <p>合計: <span id="memory-total">--</span> GB</p>
+            <p>使用中: <span id="memory-used">--</span> GB</p>
+            <p>空き: <span id="memory-available">--</span> GB</p>
+        </div>
+    </div>
+</article>
+
+<!-- ディスク -->
+<article>
+    <header>
+        <h2>ディスク</h2>
+    </header>
+    <div id="disks-container">
+        <p>読み込み中...</p>
+    </div>
+</article>
+
+<!-- システム情報 -->
+<article>
+    <header>
+        <h2>システム情報</h2>
+    </header>
+    <p>起動日時: <span id="boot-time">--</span></p>
+    <p>稼働時間: <span id="uptime">--</span></p>
+</article>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    function loadResources() {
+        fetch('/resources/api/status')
+            .then(response => response.json())
+            .then(data => {
+                // CPU
+                document.getElementById('cpu-percent').textContent = data.cpu.percent.toFixed(1);
+                document.getElementById('cpu-progress').value = data.cpu.percent;
+                document.getElementById('cpu-count').textContent = data.cpu.count;
+                document.getElementById('cpu-count-logical').textContent = data.cpu.count_logical;
+
+                // メモリ
+                document.getElementById('memory-percent').textContent = data.memory.percent.toFixed(1);
+                document.getElementById('memory-progress').value = data.memory.percent;
+                document.getElementById('memory-total').textContent = data.memory.total_gb;
+                document.getElementById('memory-used').textContent = data.memory.used_gb;
+                document.getElementById('memory-available').textContent = data.memory.available_gb;
+
+                // ディスク
+                const disksContainer = document.getElementById('disks-container');
+                disksContainer.innerHTML = '';
+
+                data.disks.forEach(disk => {
+                    const diskDiv = document.createElement('div');
+                    diskDiv.className = 'disk-item';
+                    diskDiv.innerHTML = `
+                        <h3>${disk.path}</h3>
+                        <div class="grid">
+                            <div>
+                                <p>使用率: <strong>${disk.percent.toFixed(1)}</strong>%</p>
+                                <progress value="${disk.percent}" max="100"></progress>
+                            </div>
+                            <div>
+                                <p>合計: ${disk.total_gb} GB</p>
+                                <p>使用中: ${disk.used_gb} GB</p>
+                                <p>空き: ${disk.free_gb} GB</p>
+                            </div>
+                        </div>
+                    `;
+                    disksContainer.appendChild(diskDiv);
+                });
+
+                // システム情報
+                document.getElementById('boot-time').textContent = data.system.boot_time;
+                document.getElementById('uptime').textContent = data.system.uptime;
+            })
+            .catch(error => {
+                console.error('リソース情報の取得に失敗:', error);
+            });
+    }
+
+    // 初期読み込み
+    loadResources();
+
+    // 更新ボタン
+    document.getElementById('refresh-btn').addEventListener('click', loadResources);
+});
+</script>
+{% endblock %}

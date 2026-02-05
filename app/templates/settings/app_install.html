@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}アプリインストール設定 - POL Portal{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ul>
+        <li><a href="{{ url_for('settings.index') }}">設定</a></li>
+        <li>アプリインストール設定</li>
+    </ul>
+</nav>
+
+<h1>アプリインストール設定</h1>
+
+<article>
+    <form method="post">
+        <label for="install_dir">
+            インストール先ディレクトリ
+            <input type="text" id="install_dir" name="install_dir"
+                   value="{{ settings.install_dir }}" required>
+            <small>アプリケーションがインストールされるディレクトリ</small>
+        </label>
+
+        <button type="submit">保存</button>
+    </form>
+</article>
+
+<article>
+    <header>
+        <h2>GitHub Token</h2>
+    </header>
+    <p>
+        GitHub Personal Access Token は環境変数 <code>POL_GITHUB_TOKEN</code> で設定してください。
+        セキュリティのため、Web UIからは変更できません。
+    </p>
+</article>
+{% endblock %}
