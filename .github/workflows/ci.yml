@@ -1,0 +1,195 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff
+
+      - name: Run Ruff linter
+        run: ruff check .
+
+      - name: Run Ruff formatter check
+        run: ruff format --check .
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run tests
+        id: test
+        run: pytest -v --junitxml=test-results.xml
+        continue-on-error: true
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ github.event.pull_request.number || github.sha }}
+          path: test-results.xml
+          retention-days: 7
+
+      - name: Post test results to PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            if (!fs.existsSync('test-results.xml')) {
+              console.log('No test results file found');
+              return;
+            }
+
+            const xml = fs.readFileSync('test-results.xml', 'utf8');
+
+            // Parse summary from testsuite attributes
+            const testsMatch = xml.match(/testsuite[^>]*tests="(\d+)"/);
+            const failuresMatch = xml.match(/testsuite[^>]*failures="(\d+)"/);
+            const errorsMatch = xml.match(/testsuite[^>]*errors="(\d+)"/);
+            const skippedMatch = xml.match(/testsuite[^>]*skipped="(\d+)"/);
+
+            const tests = testsMatch ? parseInt(testsMatch[1]) : 0;
+            const failures = failuresMatch ? parseInt(failuresMatch[1]) : 0;
+            const errors = errorsMatch ? parseInt(errorsMatch[1]) : 0;
+            const skipped = skippedMatch ? parseInt(skippedMatch[1]) : 0;
+            const passed = tests - failures - errors - skipped;
+
+            // Parse individual test cases
+            const testcaseRegex = /<testcase\s+([^>]*)>([\s\S]*?)<\/testcase>|<testcase\s+([^>]*)\/>/g;
+            const testCases = [];
+            let match;
+
+            while ((match = testcaseRegex.exec(xml)) !== null) {
+              const attrs = match[1] || match[3];
+              const content = match[2] || '';
+
+              const nameMatch = attrs.match(/name="([^"]*)"/);
+              const classMatch = attrs.match(/classname="([^"]*)"/);
+              const timeMatch = attrs.match(/time="([^"]*)"/);
+
+              const hasFailure = content.includes('<failure') || content.includes('<error');
+              const hasSkip = content.includes('<skipped');
+
+              let status = 'passed';
+              let message = '';
+              if (hasFailure) {
+                status = 'failed';
+                const msgMatch = content.match(/message="([^"]*)"/);
+                message = msgMatch ? msgMatch[1] : '';
+              } else if (hasSkip) {
+                status = 'skipped';
+              }
+
+              testCases.push({
+                name: nameMatch ? nameMatch[1] : 'unknown',
+                classname: classMatch ? classMatch[1] : '',
+                time: timeMatch ? parseFloat(timeMatch[1]) : 0,
+                status,
+                message
+              });
+            }
+
+            const statusIcon = (failures + errors) > 0 ? ':x:' : ':white_check_mark:';
+
+            let body = `## Test Results ${statusIcon}\n\n`;
+            body += `### サマリー\n\n`;
+            body += `| 項目 | 結果 |\n`;
+            body += `|------|------|\n`;
+            body += `| 総テスト数 | ${tests} |\n`;
+            body += `| 成功 | ${passed} |\n`;
+            body += `| 失敗 | ${failures + errors} |\n`;
+            body += `| スキップ | ${skipped} |\n\n`;
+
+            // Show test case details
+            if (testCases.length > 0) {
+              body += `### テストケース詳細\n\n`;
+              body += `| テスト名 | クラス/モジュール | 結果 | 実行時間 |\n`;
+              body += `|----------|------------------|------|----------|\n`;
+
+              // Show failed tests first
+              const failedTests = testCases.filter(t => t.status === 'failed');
+              const skippedTests = testCases.filter(t => t.status === 'skipped');
+              const passedTests = testCases.filter(t => t.status === 'passed');
+
+              for (const t of failedTests) {
+                body += `| \`${t.name}\` | ${t.classname} | :x: 失敗 | ${t.time.toFixed(3)}s |\n`;
+              }
+              for (const t of skippedTests) {
+                body += `| \`${t.name}\` | ${t.classname} | :fast_forward: スキップ | ${t.time.toFixed(3)}s |\n`;
+              }
+              for (const t of passedTests.slice(0, 50)) {
+                body += `| \`${t.name}\` | ${t.classname} | :white_check_mark: 成功 | ${t.time.toFixed(3)}s |\n`;
+              }
+              if (passedTests.length > 50) {
+                body += `| _... ${passedTests.length - 50} more passed tests_ | | | |\n`;
+              }
+
+              // Show failure details
+              if (failedTests.length > 0) {
+                body += `\n### 失敗したテストの詳細\n\n`;
+                for (const t of failedTests) {
+                  body += `#### \`${t.name}\`\n`;
+                  if (t.message) {
+                    body += `\`\`\`\n${t.message}\n\`\`\`\n\n`;
+                  }
+                }
+              }
+            }
+
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(c =>
+              c.user.type === 'Bot' && c.body.includes('## Test Results')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
+
+      - name: Check test result
+        if: steps.test.outcome == 'failure'
+        run: exit 1
