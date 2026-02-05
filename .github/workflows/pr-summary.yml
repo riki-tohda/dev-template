@@ -1,0 +1,387 @@
+name: PR Summary
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  pr-summary:
+    name: Generate PR Summary
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v44
+
+      - name: Extract functions and classes from Python files
+        id: extract-code
+        env:
+          ADDED_FILES: ${{ steps.changed-files.outputs.added_files }}
+          MODIFIED_FILES: ${{ steps.changed-files.outputs.modified_files }}
+        run: |
+          python << 'PYTHON_SCRIPT'
+          import ast
+          import json
+          import os
+
+          def get_function_signature(node):
+              """Get function signature as string."""
+              args = []
+              for arg in node.args.args:
+                  arg_str = arg.arg
+                  if arg.annotation:
+                      try:
+                          arg_str += ': ' + ast.unparse(arg.annotation)
+                      except:
+                          pass
+                  args.append(arg_str)
+
+              returns = ''
+              if node.returns:
+                  try:
+                      returns = ' -> ' + ast.unparse(node.returns)
+                  except:
+                      pass
+
+              return f"({', '.join(args)}){returns}"
+
+          def extract_definitions(file_path):
+              """Extract function and class definitions with full docstrings from a Python file."""
+              try:
+                  with open(file_path, 'r', encoding='utf-8') as f:
+                      source = f.read()
+                  tree = ast.parse(source)
+              except (SyntaxError, FileNotFoundError, UnicodeDecodeError) as e:
+                  return []
+
+              definitions = []
+
+              for node in ast.walk(tree):
+                  if isinstance(node, ast.FunctionDef) or isinstance(node, ast.AsyncFunctionDef):
+                      docstring = ast.get_docstring(node) or ''
+                      signature = get_function_signature(node)
+                      definitions.append({
+                          'type': 'function',
+                          'name': node.name,
+                          'line': node.lineno,
+                          'signature': signature,
+                          'docstring': docstring,
+                          'args': [arg.arg for arg in node.args.args]
+                      })
+                  elif isinstance(node, ast.ClassDef):
+                      docstring = ast.get_docstring(node) or ''
+                      methods = []
+                      for n in node.body:
+                          if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                              method_doc = ast.get_docstring(n) or ''
+                              method_sig = get_function_signature(n)
+                              methods.append({
+                                  'name': n.name,
+                                  'signature': method_sig,
+                                  'docstring': method_doc
+                              })
+                      definitions.append({
+                          'type': 'class',
+                          'name': node.name,
+                          'line': node.lineno,
+                          'docstring': docstring,
+                          'methods': methods[:15]
+                      })
+
+              return definitions
+
+          # Get changed Python files
+          added = os.environ.get('ADDED_FILES', '').split()
+          modified = os.environ.get('MODIFIED_FILES', '').split()
+
+          result = {'added': {}, 'modified': {}}
+
+          for f in added:
+              if f.endswith('.py') and os.path.exists(f):
+                  defs = extract_definitions(f)
+                  if defs:
+                      result['added'][f] = defs
+
+          for f in modified:
+              if f.endswith('.py') and os.path.exists(f):
+                  defs = extract_definitions(f)
+                  if defs:
+                      result['modified'][f] = defs
+
+          # Write to file for github-script to read
+          with open('code-definitions.json', 'w') as f:
+              json.dump(result, f)
+
+          print(f"Extracted definitions from {len(result['added']) + len(result['modified'])} files")
+          PYTHON_SCRIPT
+
+      - name: Generate PR Summary
+        uses: actions/github-script@v7
+        env:
+          ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+          ADDED_FILES: ${{ steps.changed-files.outputs.added_files }}
+          MODIFIED_FILES: ${{ steps.changed-files.outputs.modified_files }}
+          DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const title = pr.title;
+
+            // Parse file lists
+            const parseFileList = (str) => str ? str.split(' ').filter(f => f.length > 0) : [];
+            const changedFiles = parseFileList(process.env.ALL_CHANGED_FILES);
+            const addedFiles = parseFileList(process.env.ADDED_FILES);
+            const modifiedFiles = parseFileList(process.env.MODIFIED_FILES);
+            const deletedFiles = parseFileList(process.env.DELETED_FILES);
+
+            // Determine change type from PR title
+            let changeType = 'Other';
+            let changeTypeLabel = 'other';
+            if (title.startsWith('feat:') || title.startsWith('feat(')) {
+              changeType = 'Feature';
+              changeTypeLabel = 'feat';
+            } else if (title.startsWith('fix:') || title.startsWith('fix(')) {
+              changeType = 'Bug Fix';
+              changeTypeLabel = 'fix';
+            } else if (title.startsWith('docs:') || title.startsWith('docs(')) {
+              changeType = 'Documentation';
+              changeTypeLabel = 'docs';
+            } else if (title.startsWith('refactor:') || title.startsWith('refactor(')) {
+              changeType = 'Refactor';
+              changeTypeLabel = 'refactor';
+            } else if (title.startsWith('perf:') || title.startsWith('perf(')) {
+              changeType = 'Performance';
+              changeTypeLabel = 'perf';
+            } else if (title.startsWith('test:') || title.startsWith('test(')) {
+              changeType = 'Test';
+              changeTypeLabel = 'test';
+            } else if (title.startsWith('chore:') || title.startsWith('chore(')) {
+              changeType = 'Chore';
+              changeTypeLabel = 'chore';
+            } else if (title.startsWith('style:') || title.startsWith('style(')) {
+              changeType = 'Style';
+              changeTypeLabel = 'style';
+            } else if (title.startsWith('ci:') || title.startsWith('ci(')) {
+              changeType = 'CI';
+              changeTypeLabel = 'ci';
+            }
+
+            // Categorize files
+            const categories = {
+              'Core': { patterns: [/^pol_s3_sync\/batch\//, /^pol_s3_sync\/core\//, /^src\//], files: [] },
+              'Web': { patterns: [/^pol_s3_sync\/web\/.*\.py$/, /^web\//], files: [] },
+              'JavaScript': { patterns: [/\.js$/, /\.ts$/, /\.jsx$/, /\.tsx$/], files: [] },
+              'CSS': { patterns: [/\.css$/, /\.scss$/, /\.sass$/], files: [] },
+              'Config': { patterns: [/\.yml$/, /\.yaml$/, /\.ini$/, /\.toml$/, /\.json$/], files: [] },
+              'Docs': { patterns: [/\.md$/, /^docs\//], files: [] },
+              'Tests': { patterns: [/test.*\.py$/, /^tests\//, /\.test\.[jt]sx?$/, /\.spec\.[jt]sx?$/], files: [] },
+              'Other': { patterns: [], files: [] }
+            };
+
+            for (const file of changedFiles) {
+              let categorized = false;
+              for (const [name, cat] of Object.entries(categories)) {
+                if (name === 'Other') continue;
+                if (cat.patterns.some(p => p.test(file))) {
+                  const status = addedFiles.includes(file) ? 'Added' :
+                                 deletedFiles.includes(file) ? 'Deleted' : 'Modified';
+                  cat.files.push({ name: file, status });
+                  categorized = true;
+                  break;
+                }
+              }
+              if (!categorized) {
+                const status = addedFiles.includes(file) ? 'Added' :
+                               deletedFiles.includes(file) ? 'Deleted' : 'Modified';
+                categories['Other'].files.push({ name: file, status });
+              }
+            }
+
+            // Count by extension
+            const byExt = {};
+            for (const file of changedFiles) {
+              const parts = file.split('.');
+              const ext = parts.length > 1 ? '.' + parts.pop() : 'other';
+              byExt[ext] = (byExt[ext] || 0) + 1;
+            }
+
+            // Build comment body
+            let body = '## PR Summary\n\n';
+
+            // Change type
+            body += '### 変更タイプ\n';
+            body += `\`${changeType}\` (${changeTypeLabel})\n\n`;
+
+            // Implementation summary from PR body
+            body += '### 実装内容\n';
+            const prBody = pr.body || '_説明なし_';
+            body += prBody + '\n\n';
+
+            // File statistics
+            body += '### 影響ファイル\n\n';
+            body += '| 項目 | 数 |\n';
+            body += '|------|------|\n';
+            body += `| 追加 | ${addedFiles.length} files |\n`;
+            body += `| 変更 | ${modifiedFiles.length} files |\n`;
+            body += `| 削除 | ${deletedFiles.length} files |\n\n`;
+
+            // File types
+            body += '#### ファイルタイプ別\n';
+            const sortedExts = Object.entries(byExt).sort((a, b) => b[1] - a[1]).slice(0, 10);
+            for (const [ext, count] of sortedExts) {
+              body += `- \`${ext}\`: ${count} files\n`;
+            }
+            body += '\n';
+
+            // Files by category
+            body += '#### カテゴリ別\n';
+            let hasFiles = false;
+            for (const [name, cat] of Object.entries(categories)) {
+              if (cat.files.length === 0) continue;
+              hasFiles = true;
+              body += `| カテゴリ | ファイル | 状態 |\n`;
+              body += `|----------|----------|------|\n`;
+              for (const f of cat.files.slice(0, 20)) {
+                body += `| ${name} | \`${f.name}\` | ${f.status} |\n`;
+              }
+              if (cat.files.length > 20) {
+                body += `| ${name} | _... ${cat.files.length - 20} more files_ | |\n`;
+              }
+              body += '\n';
+              break;
+            }
+
+            // Full category table if multiple categories
+            const nonEmptyCategories = Object.entries(categories).filter(([_, cat]) => cat.files.length > 0);
+            if (nonEmptyCategories.length > 1) {
+              body += '| カテゴリ | ファイル | 状態 |\n';
+              body += '|----------|----------|------|\n';
+              for (const [name, cat] of nonEmptyCategories) {
+                for (const f of cat.files.slice(0, 10)) {
+                  body += `| ${name} | \`${f.name}\` | ${f.status} |\n`;
+                }
+                if (cat.files.length > 10) {
+                  body += `| ${name} | _... ${cat.files.length - 10} more files_ | |\n`;
+                }
+              }
+              body += '\n';
+            }
+
+            // Code definitions (functions/classes) with full details
+            const fs = require('fs');
+            if (fs.existsSync('code-definitions.json')) {
+              const codeDefs = JSON.parse(fs.readFileSync('code-definitions.json', 'utf8'));
+
+              const hasAddedDefs = Object.keys(codeDefs.added).length > 0;
+              const hasModifiedDefs = Object.keys(codeDefs.modified).length > 0;
+
+              if (hasAddedDefs || hasModifiedDefs) {
+                body += '### 追加・変更された関数/クラス\n\n';
+
+                const formatDefs = (defs, file) => {
+                  let result = '';
+                  for (const def of defs.slice(0, 15)) {
+                    if (def.type === 'function') {
+                      const sig = def.signature || '()';
+                      const firstLine = def.docstring ? def.docstring.split('\n')[0] : '_説明なし_';
+                      result += `- ⚡ \`${def.name}${sig}\` - ${firstLine}\n`;
+                    } else if (def.type === 'class') {
+                      const firstLine = def.docstring ? def.docstring.split('\n')[0] : '_説明なし_';
+                      result += `- 📦 **\`${def.name}\`** - ${firstLine}\n`;
+                      if (def.methods && def.methods.length > 0) {
+                        for (const method of def.methods.slice(0, 5)) {
+                          const methodFirstLine = method.docstring ? method.docstring.split('\n')[0] : '';
+                          const methodDesc = methodFirstLine ? `: ${methodFirstLine}` : '';
+                          result += `  - \`${method.name}${method.signature || '()'}\`${methodDesc}\n`;
+                        }
+                        if (def.methods.length > 5) {
+                          result += `  - _... ${def.methods.length - 5} more methods_\n`;
+                        }
+                      }
+                    }
+                  }
+                  return result;
+                };
+
+                if (hasAddedDefs) {
+                  body += '#### 新規追加ファイル\n\n';
+                  for (const [file, defs] of Object.entries(codeDefs.added)) {
+                    body += `**\`${file}\`**\n`;
+                    body += formatDefs(defs, file);
+                    body += '\n';
+                  }
+                }
+
+                if (hasModifiedDefs) {
+                  body += '#### 変更されたファイル\n\n';
+                  for (const [file, defs] of Object.entries(codeDefs.modified)) {
+                    body += `**\`${file}\`**\n`;
+                    body += formatDefs(defs, file);
+                    body += '\n';
+                  }
+                }
+              }
+            }
+
+            // Test checklist
+            body += '### テストチェックリスト\n\n';
+            if (categories['Core'].files.length > 0) {
+              body += '- [ ] コア機能が正常に動作する\n';
+              body += '- [ ] エラーハンドリングが適切\n';
+            }
+            if (categories['Web'].files.length > 0 || categories['JavaScript'].files.length > 0) {
+              body += '- [ ] Web UIが正しく表示される\n';
+              body += '- [ ] APIエンドポイントが期待通り応答する\n';
+            }
+            if (categories['Config'].files.length > 0) {
+              body += '- [ ] 設定変更に後方互換性がある\n';
+            }
+            if (categories['Tests'].files.length > 0) {
+              body += '- [ ] テストが全て通過する\n';
+            }
+            body += '- [ ] セキュリティの脆弱性がない\n';
+            body += '- [ ] プロジェクトの規約に従っている\n';
+
+            // Find existing comment or create new one
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number
+            });
+
+            const botComment = comments.data.find(c =>
+              c.user.type === 'Bot' && c.body.includes('## PR Summary')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: body
+              });
+            }
