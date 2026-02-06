@@ -53,7 +53,11 @@ def server():
 
             db.set_setting("server.port", port, "server")
             flash("サーバー設定を保存しました（再起動後に反映されます）", "success")
-            logger.info("サーバー設定を変更しました port=%d user=%s", port, current_user.username)
+            logger.info(
+                "サーバー設定を変更しました port=%d user=%s",
+                port,
+                current_user.username,
+            )
         except ValueError as e:
             flash(str(e), "error")
 
@@ -79,7 +83,9 @@ def session():
         try:
             lifetime_hours = int(request.form.get("lifetime_hours", 24))
             if lifetime_hours < 1 or lifetime_hours > 168:
-                raise ValueError("セッション有効時間は1-168時間の範囲で指定してください")
+                raise ValueError(
+                    "セッション有効時間は1-168時間の範囲で指定してください"
+                )
 
             db.set_setting("session.lifetime_hours", lifetime_hours, "session")
             flash("セッション設定を保存しました", "success")
@@ -145,7 +151,9 @@ def users_add():
         user = InitialUser(username=username, password=password, role=role)
         db.create_user(user)
         flash(f"ユーザー {username} を作成しました", "success")
-        logger.info("ユーザーを作成しました new_user=%s by=%s", username, current_user.username)
+        logger.info(
+            "ユーザーを作成しました new_user=%s by=%s", username, current_user.username
+        )
 
         return redirect(url_for("settings.users"))
 
@@ -200,7 +208,9 @@ def users_edit(user_id: int):
 
         db.update_user(user)
         flash(f"ユーザー {username} を更新しました", "success")
-        logger.info("ユーザーを更新しました target=%s by=%s", username, current_user.username)
+        logger.info(
+            "ユーザーを更新しました target=%s by=%s", username, current_user.username
+        )
 
         return redirect(url_for("settings.users"))
 
@@ -292,9 +302,7 @@ def app_install():
 
         db.set_setting("app_install.install_dir", install_dir, "app_install")
         if github_api_url:
-            db.set_setting(
-                "app_install.github_api_url", github_api_url, "app_install"
-            )
+            db.set_setting("app_install.github_api_url", github_api_url, "app_install")
         flash("アプリインストール設定を保存しました", "success")
         logger.info(
             "アプリインストール設定を変更しました install_dir=%s github_api_url=%s user=%s",

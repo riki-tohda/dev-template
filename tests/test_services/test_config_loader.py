@@ -275,7 +275,9 @@ class TestConfigLoader:
         loader = ConfigLoader(tmp_path)
         config = loader.load_config_yaml()
 
-        assert config.app_install.github_api_url == "https://github.example.co.jp/api/v3"
+        assert (
+            config.app_install.github_api_url == "https://github.example.co.jp/api/v3"
+        )
         assert config.app_install.install_dir == "/opt/apps"
 
     def test_load_config_yaml_with_os_specific_values(self, tmp_path: Path) -> None:
@@ -381,7 +383,9 @@ class TestConfigLoader:
         config = loader.get_default_config()
         config.initial_users = []
 
-        with pytest.raises(ConfigValidationError, match="初期ユーザーが定義されていません"):
+        with pytest.raises(
+            ConfigValidationError, match="初期ユーザーが定義されていません"
+        ):
             loader.validate_config(config)
 
     def test_validate_config_no_admin(self, tmp_path: Path) -> None:
@@ -390,7 +394,9 @@ class TestConfigLoader:
 
         loader = ConfigLoader(tmp_path)
         config = loader.get_default_config()
-        config.initial_users = [InitialUser(username="user", password="user", role="user")]
+        config.initial_users = [
+            InitialUser(username="user", password="user", role="user")
+        ]
 
         with pytest.raises(ConfigValidationError, match="admin権限"):
             loader.validate_config(config)

@@ -76,7 +76,9 @@ def proxy(app_id: str, path: str = ""):
 
     # プロキシが有効か確認
     if not app.proxy_enabled:
-        abort(403, description="このアプリケーションはプロキシ経由でのアクセスが無効です")
+        abort(
+            403, description="このアプリケーションはプロキシ経由でのアクセスが無効です"
+        )
 
     # ターゲットURLを構築
     target_url = f"http://localhost:{app.port}/{path}"
@@ -100,7 +102,9 @@ def proxy(app_id: str, path: str = ""):
         # リクエストを転送
         req = urllib.request.Request(
             target_url,
-            data=request.get_data() if request.method in ("POST", "PUT", "PATCH") else None,
+            data=request.get_data()
+            if request.method in ("POST", "PUT", "PATCH")
+            else None,
             headers=headers,
             method=request.method,
         )

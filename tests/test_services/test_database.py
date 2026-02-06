@@ -319,8 +319,10 @@ class TestConnectionContextManager:
         db.initialize()
 
         with db.connection() as conn:
-            conn.execute("INSERT INTO settings (key, value, category) VALUES (?, ?, ?)",
-                        ("test", '"value"', "test"))
+            conn.execute(
+                "INSERT INTO settings (key, value, category) VALUES (?, ?, ?)",
+                ("test", '"value"', "test"),
+            )
 
         # 新しいコネクションで確認
         result = db.get_setting("test")
@@ -336,8 +338,10 @@ class TestConnectionContextManager:
 
         try:
             with db.connection() as conn:
-                conn.execute("UPDATE settings SET value = ? WHERE key = ?",
-                            ('"modified"', "test"))
+                conn.execute(
+                    "UPDATE settings SET value = ? WHERE key = ?",
+                    ('"modified"', "test"),
+                )
                 raise ValueError("Test error")
         except ValueError:
             pass

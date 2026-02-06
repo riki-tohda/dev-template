@@ -164,9 +164,7 @@ def validate_threshold(value: int, name: str) -> None:
         ConfigValidationError: 1-100の範囲外の場合
     """
     if not isinstance(value, int) or value < 1 or value > 100:
-        raise ConfigValidationError(
-            f"{name}は1-100%の範囲で指定してください: {value}"
-        )
+        raise ConfigValidationError(f"{name}は1-100%の範囲で指定してください: {value}")
 
 
 def validate_log_level(level: str) -> None:
@@ -456,9 +454,7 @@ class ConfigLoader:
                 has_admin = True
 
         if not has_admin:
-            raise ConfigValidationError(
-                "admin権限を持つ初期ユーザーが最低1人必要です"
-            )
+            raise ConfigValidationError("admin権限を持つ初期ユーザーが最低1人必要です")
 
     def validate_applications(self, applications: list[Application]) -> None:
         """アプリケーション定義をバリデートする。
@@ -485,20 +481,14 @@ class ConfigLoader:
 
             # ポート重複チェック
             if app.port in seen_ports:
-                raise ConfigValidationError(
-                    f"ポート番号が重複しています: {app.port}"
-                )
+                raise ConfigValidationError(f"ポート番号が重複しています: {app.port}")
             seen_ports.add(app.port)
 
             # 必須フィールドチェック
             if not app.github_owner:
-                raise ConfigValidationError(
-                    f"github_ownerが未設定です: {app.id}"
-                )
+                raise ConfigValidationError(f"github_ownerが未設定です: {app.id}")
             if not app.github_repo:
-                raise ConfigValidationError(
-                    f"github_repoが未設定です: {app.id}"
-                )
+                raise ConfigValidationError(f"github_repoが未設定です: {app.id}")
 
     def get_default_config(self) -> SystemConfig:
         """デフォルト設定を取得する。
@@ -513,5 +503,7 @@ class ConfigLoader:
             app_install=AppInstallConfig(
                 install_dir=self._get_default("app_install.install_dir"),
             ),
-            initial_users=[InitialUser(username="admin", password="admin", role="admin")],
+            initial_users=[
+                InitialUser(username="admin", password="admin", role="admin")
+            ],
         )

@@ -167,7 +167,9 @@ def _save_system_config(db: Database, config: SystemConfig) -> None:
     )
 
     # アプリインストール設定
-    db.set_setting("app_install.install_dir", config.app_install.install_dir, "app_install")
+    db.set_setting(
+        "app_install.install_dir", config.app_install.install_dir, "app_install"
+    )
     db.set_setting(
         "app_install.github_api_url", config.app_install.github_api_url, "app_install"
     )
@@ -180,9 +182,13 @@ def _save_system_config(db: Database, config: SystemConfig) -> None:
     db.set_setting("logging.backup_count", config.logging.backup_count, "logging")
     db.set_setting("logging.retention_days", config.logging.retention_days, "logging")
     db.set_setting("logging.archive.enabled", config.logging.archive.enabled, "logging")
-    db.set_setting("logging.archive.directory", config.logging.archive.directory, "logging")
     db.set_setting(
-        "logging.archive.retention_days", config.logging.archive.retention_days, "logging"
+        "logging.archive.directory", config.logging.archive.directory, "logging"
+    )
+    db.set_setting(
+        "logging.archive.retention_days",
+        config.logging.archive.retention_days,
+        "logging",
     )
     db.set_setting(
         "logging.max_folder_size_mb", config.logging.max_folder_size_mb, "logging"
@@ -215,9 +221,7 @@ def _apply_flask_config(
     app.config["DEBUG"] = db.get_setting("server.debug", False)
 
     # セッション設定
-    app.config["SESSION_LIFETIME_HOURS"] = db.get_setting(
-        "session.lifetime_hours", 24
-    )
+    app.config["SESSION_LIFETIME_HOURS"] = db.get_setting("session.lifetime_hours", 24)
 
     # リソースモニタ設定
     app.config["DISK_PATHS"] = db.get_setting("resource_monitor.disk_paths", ["/"])

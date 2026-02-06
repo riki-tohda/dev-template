@@ -89,9 +89,13 @@ class GitHubClient:
             if e.code == 404:
                 raise GitHubClientError(f"リソースが見つかりません: {endpoint}")
             elif e.code == 401:
-                raise GitHubClientError("認証に失敗しました。GitHub Tokenを確認してください。")
+                raise GitHubClientError(
+                    "認証に失敗しました。GitHub Tokenを確認してください。"
+                )
             elif e.code == 403:
-                raise GitHubClientError("アクセスが拒否されました。権限を確認してください。")
+                raise GitHubClientError(
+                    "アクセスが拒否されました。権限を確認してください。"
+                )
             else:
                 raise GitHubClientError(f"GitHub API エラー: {e.code} {e.reason}")
         except urllib.error.URLError as e:
@@ -282,9 +286,7 @@ class AppInstaller:
             if backup_dir and backup_dir.exists():
                 shutil.rmtree(backup_dir)
 
-            logger.info(
-                "インストール完了 app=%s version=%s", app_id, release.tag_name
-            )
+            logger.info("インストール完了 app=%s version=%s", app_id, release.tag_name)
             return release.tag_name
 
         except Exception as e:
@@ -329,7 +331,9 @@ class AppInstaller:
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             # zipの構造を確認（ルートに1つのディレクトリがある場合は中身を展開）
             names = zip_ref.namelist()
-            if names and all(name.startswith(names[0].split("/")[0] + "/") for name in names):
+            if names and all(
+                name.startswith(names[0].split("/")[0] + "/") for name in names
+            ):
                 # ルートディレクトリがある
                 root_dir = names[0].split("/")[0]
                 for member in zip_ref.infolist():

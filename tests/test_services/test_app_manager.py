@@ -210,9 +210,7 @@ class TestAppManager:
 
     def test_determine_status_stopped(self, manager: AppManager):
         """停止状態の判定"""
-        status = manager._determine_status(
-            service_active=False, health_check_ok=None
-        )
+        status = manager._determine_status(service_active=False, health_check_ok=None)
         assert status == AppStatus.STOPPED
 
     def test_determine_status_running(self, manager: AppManager):

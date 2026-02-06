@@ -219,19 +219,23 @@ def api_check_update(app_id: str):
         )
 
         if release is None:
-            return jsonify({
-                "has_update": False,
-                "current_version": app.installed_version,
-                "latest_version": app.installed_version,
-            })
+            return jsonify(
+                {
+                    "has_update": False,
+                    "current_version": app.installed_version,
+                    "latest_version": app.installed_version,
+                }
+            )
 
-        return jsonify({
-            "has_update": True,
-            "current_version": app.installed_version,
-            "latest_version": release.tag_name,
-            "release_name": release.name,
-            "published_at": release.published_at.isoformat(),
-        })
+        return jsonify(
+            {
+                "has_update": True,
+                "current_version": app.installed_version,
+                "latest_version": release.tag_name,
+                "release_name": release.name,
+                "published_at": release.published_at.isoformat(),
+            }
+        )
     except GitHubClientError as e:
         return jsonify({"error": str(e)}), 500
 
@@ -251,7 +255,9 @@ def api_install(app_id: str):
     app = db.get_application(app_id)
 
     if app is None:
-        return jsonify({"success": False, "message": "アプリケーションが見つかりません"}), 404
+        return jsonify(
+            {"success": False, "message": "アプリケーションが見つかりません"}
+        ), 404
 
     if app.installed:
         return jsonify({"success": False, "message": "既にインストールされています"})
@@ -273,11 +279,13 @@ def api_install(app_id: str):
             current_user.username,
         )
 
-        return jsonify({
-            "success": True,
-            "message": f"インストールが完了しました（{version}）",
-            "version": version,
-        })
+        return jsonify(
+            {
+                "success": True,
+                "message": f"インストールが完了しました（{version}）",
+                "version": version,
+            }
+        )
     except GitHubClientError as e:
         logger.error("インストールに失敗しました app=%s error=%s", app_id, e)
         return jsonify({"success": False, "message": str(e)}), 500
@@ -298,7 +306,9 @@ def api_update(app_id: str):
     app = db.get_application(app_id)
 
     if app is None:
-        return jsonify({"success": False, "message": "アプリケーションが見つかりません"}), 404
+        return jsonify(
+            {"success": False, "message": "アプリケーションが見つかりません"}
+        ), 404
 
     if not app.installed:
         return jsonify({"success": False, "message": "インストールされていません"})
@@ -328,11 +338,13 @@ def api_update(app_id: str):
             current_user.username,
         )
 
-        return jsonify({
-            "success": True,
-            "message": f"アップデートが完了しました（{version}）",
-            "version": version,
-        })
+        return jsonify(
+            {
+                "success": True,
+                "message": f"アップデートが完了しました（{version}）",
+                "version": version,
+            }
+        )
     except GitHubClientError as e:
         logger.error("アップデートに失敗しました app=%s error=%s", app_id, e)
         return jsonify({"success": False, "message": str(e)}), 500
@@ -353,7 +365,9 @@ def api_uninstall(app_id: str):
     app = db.get_application(app_id)
 
     if app is None:
-        return jsonify({"success": False, "message": "アプリケーションが見つかりません"}), 404
+        return jsonify(
+            {"success": False, "message": "アプリケーションが見つかりません"}
+        ), 404
 
     if not app.installed:
         return jsonify({"success": False, "message": "インストールされていません"})
@@ -380,10 +394,12 @@ def api_uninstall(app_id: str):
             current_user.username,
         )
 
-        return jsonify({
-            "success": True,
-            "message": "アンインストールが完了しました",
-        })
+        return jsonify(
+            {
+                "success": True,
+                "message": "アンインストールが完了しました",
+            }
+        )
     except GitHubClientError as e:
         logger.error("アンインストールに失敗しました app=%s error=%s", app_id, e)
         return jsonify({"success": False, "message": str(e)}), 500

@@ -433,8 +433,12 @@ class Database:
             installed_at=self._parse_datetime(row["installed_at"]),
             sort_order=row["sort_order"],
             updated_at=self._parse_datetime(row["updated_at"]),
-            proxy_enabled=bool(row["proxy_enabled"]) if "proxy_enabled" in row_keys else True,
-            proxy_rewrite_urls=bool(row["proxy_rewrite_urls"]) if "proxy_rewrite_urls" in row_keys else True,
+            proxy_enabled=bool(row["proxy_enabled"])
+            if "proxy_enabled" in row_keys
+            else True,
+            proxy_rewrite_urls=bool(row["proxy_rewrite_urls"])
+            if "proxy_rewrite_urls" in row_keys
+            else True,
         )
 
     def _parse_datetime(self, value: str | None) -> datetime | None:
