@@ -1,0 +1,604 @@
+name: Merge Documentation
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: read
+  actions: read
+
+jobs:
+  merge-docs:
+    name: Generate Merge Documentation
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Get PR Details
+        id: pr-details
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+
+            // Get commits
+            const commits = await github.rest.pulls.listCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number
+            });
+
+            // Get files with patch (diff)
+            const files = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number
+            });
+
+            // Get reviews
+            const reviews = await github.rest.pulls.listReviews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number
+            });
+
+            // Get unique approved reviewers
+            const approvedReviewers = [...new Set(
+              reviews.data
+                .filter(r => r.state === 'APPROVED')
+                .map(r => r.user.login)
+            )];
+
+            // Get all reviewers
+            const allReviewers = [...new Set(
+              reviews.data.map(r => r.user.login)
+            )];
+
+            return {
+              number: pr.number,
+              title: pr.title,
+              body: pr.body || '',
+              author: pr.user.login,
+              merged_at: pr.merged_at,
+              merged_by: pr.merged_by?.login || 'unknown',
+              reviewers: allReviewers,
+              approved_by: approvedReviewers,
+              commits: commits.data.map(c => ({
+                sha: c.sha.slice(0, 7),
+                message: c.commit.message.split('\n')[0]
+              })),
+              files: files.data.map(f => ({
+                name: f.filename,
+                status: f.status,
+                additions: f.additions,
+                deletions: f.deletions,
+                patch: f.patch || ''
+              })),
+              additions: files.data.reduce((sum, f) => sum + f.additions, 0),
+              deletions: files.data.reduce((sum, f) => sum + f.deletions, 0)
+            };
+
+      - name: Download test results artifact
+        id: download-artifact
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            // List workflow runs for this PR
+            const runs = await github.rest.actions.listWorkflowRunsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              event: 'pull_request',
+              head_sha: context.payload.pull_request.head.sha
+            });
+
+            // Find CI workflow run
+            const ciRun = runs.data.workflow_runs.find(r => r.name === 'CI');
+            if (!ciRun) {
+              console.log('No CI workflow run found');
+              return { found: false };
+            }
+
+            // List artifacts
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: ciRun.id
+            });
+
+            const testArtifact = artifacts.data.artifacts.find(a =>
+              a.name.startsWith('test-results-')
+            );
+
+            if (!testArtifact) {
+              console.log('No test results artifact found');
+              return { found: false };
+            }
+
+            // Download artifact
+            const download = await github.rest.actions.downloadArtifact({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              artifact_id: testArtifact.id,
+              archive_format: 'zip'
+            });
+
+            fs.writeFileSync('test-results.zip', Buffer.from(download.data));
+            return { found: true };
+
+      - name: Extract test results
+        if: steps.download-artifact.outputs.result != '{"found":false}'
+        run: |
+          unzip -o test-results.zip -d . || true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Extract code definitions
+        id: extract-code
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { execSync } = require('child_process');
+            const fs = require('fs');
+
+            const details = ${{ steps.pr-details.outputs.result }};
+
+            // Get Python files that were added or modified
+            const pyFiles = details.files
+              .filter(f => f.name.endsWith('.py') && (f.status === 'added' || f.status === 'modified'))
+              .map(f => f.name);
+
+            if (pyFiles.length === 0) {
+              fs.writeFileSync('code-definitions.json', JSON.stringify({added: {}, modified: {}}));
+              return;
+            }
+
+            // Write Python script - extract full docstrings
+            const pythonScript = `
+            import ast
+            import json
+            import os
+            import sys
+
+            def get_function_signature(node):
+                """Get function signature as string."""
+                args = []
+                for arg in node.args.args:
+                    arg_str = arg.arg
+                    if arg.annotation:
+                        try:
+                            arg_str += ': ' + ast.unparse(arg.annotation)
+                        except:
+                            pass
+                    args.append(arg_str)
+
+                returns = ''
+                if node.returns:
+                    try:
+                        returns = ' -> ' + ast.unparse(node.returns)
+                    except:
+                        pass
+
+                return f"({', '.join(args)}){returns}"
+
+            def extract_definitions(file_path):
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        source = f.read()
+                    tree = ast.parse(source)
+                except (SyntaxError, FileNotFoundError, UnicodeDecodeError):
+                    return []
+
+                definitions = []
+                for node in ast.walk(tree):
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        docstring = ast.get_docstring(node) or ''
+                        signature = get_function_signature(node)
+                        definitions.append({
+                            'type': 'function',
+                            'name': node.name,
+                            'line': node.lineno,
+                            'signature': signature,
+                            'docstring': docstring,
+                            'args': [arg.arg for arg in node.args.args]
+                        })
+                    elif isinstance(node, ast.ClassDef):
+                        docstring = ast.get_docstring(node) or ''
+                        methods = []
+                        for n in node.body:
+                            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                                method_doc = ast.get_docstring(n) or ''
+                                method_sig = get_function_signature(n)
+                                methods.append({
+                                    'name': n.name,
+                                    'signature': method_sig,
+                                    'docstring': method_doc
+                                })
+                        definitions.append({
+                            'type': 'class',
+                            'name': node.name,
+                            'line': node.lineno,
+                            'docstring': docstring,
+                            'methods': methods[:20]
+                        })
+                return definitions
+
+            files = sys.argv[1:]
+            result = {'added': {}, 'modified': {}}
+            for f in files:
+                if os.path.exists(f):
+                    defs = extract_definitions(f)
+                    if defs:
+                        result['modified'][f] = defs
+
+            print(json.dumps(result))
+            `;
+
+            fs.writeFileSync('extract_defs.py', pythonScript);
+
+            try {
+              const result = execSync(`python extract_defs.py ${pyFiles.join(' ')}`, { encoding: 'utf8' });
+              fs.writeFileSync('code-definitions.json', result);
+            } catch (e) {
+              console.log('Failed to extract code definitions:', e.message);
+              fs.writeFileSync('code-definitions.json', JSON.stringify({added: {}, modified: {}}));
+            }
+
+      - name: Generate Documentation Files
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const details = ${{ steps.pr-details.outputs.result }};
+            const mergedAt = new Date(details.merged_at);
+            const dateStr = mergedAt.toISOString().split('T')[0];
+
+            // Determine change type from PR title
+            const title = details.title;
+            let type = 'Other';
+            if (title.startsWith('feat:') || title.startsWith('feat(')) type = 'Added';
+            else if (title.startsWith('fix:') || title.startsWith('fix(')) type = 'Fixed';
+            else if (title.startsWith('docs:') || title.startsWith('docs(')) type = 'Docs';
+            else if (title.startsWith('refactor:') || title.startsWith('refactor(')) type = 'Changed';
+            else if (title.startsWith('perf:') || title.startsWith('perf(')) type = 'Performance';
+            else if (title.startsWith('chore:') || title.startsWith('chore(')) type = 'Chore';
+            else if (title.startsWith('test:') || title.startsWith('test(')) type = 'Test';
+            else if (title.startsWith('ci:') || title.startsWith('ci(')) type = 'CI';
+
+            // Clean title
+            const cleanTitle = title.replace(/^(feat|fix|docs|refactor|perf|chore|test|style|ci)(\([^)]*\))?:\s*/, '');
+
+            // Ensure directories exist
+            const baseDir = 'docs/更新履歴';
+            const prDir = path.join(baseDir, 'pr');
+            const testsDir = path.join(baseDir, 'tests');
+
+            for (const dir of [baseDir, prDir, testsDir]) {
+              if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+              }
+            }
+
+            // 1. Update CHANGELOG.md
+            const changelogPath = path.join(baseDir, 'CHANGELOG.md');
+            let changelog = '';
+
+            if (fs.existsSync(changelogPath)) {
+              changelog = fs.readFileSync(changelogPath, 'utf8');
+            } else {
+              changelog = '# Changelog\n\nAll notable changes to this project will be documented in this file.\n\n';
+            }
+
+            // Find or create today's section
+            const todayHeader = `## ${dateStr}`;
+            if (!changelog.includes(todayHeader)) {
+              const headerEnd = changelog.indexOf('\n\n', changelog.indexOf('# Changelog'));
+              const beforeHeader = changelog.slice(0, headerEnd + 2);
+              const afterHeader = changelog.slice(headerEnd + 2);
+              changelog = beforeHeader + `${todayHeader}\n\n` + afterHeader;
+            }
+
+            // Add entry under today's section
+            const entry = `- **[${type}]** ${cleanTitle} (#${details.number}) @${details.author}\n`;
+            const sectionStart = changelog.indexOf(todayHeader);
+            const insertPos = changelog.indexOf('\n', sectionStart) + 1;
+            changelog = changelog.slice(0, insertPos) + entry + changelog.slice(insertPos);
+
+            fs.writeFileSync(changelogPath, changelog);
+            console.log(`Updated ${changelogPath}`);
+
+            // 2. Generate PR detail log
+            let prContent = `# PR #${details.number}: ${details.title}\n\n`;
+
+            prContent += `## 基本情報\n\n`;
+            prContent += `| 項目 | 内容 |\n`;
+            prContent += `|------|------|\n`;
+            prContent += `| PR番号 | #${details.number} |\n`;
+            prContent += `| 作成者 | @${details.author} |\n`;
+            prContent += `| マージ日 | ${dateStr} |\n`;
+            prContent += `| マージ実行者 | @${details.merged_by} |\n`;
+            prContent += `| 変更量 | +${details.additions}/-${details.deletions} |\n\n`;
+
+            prContent += `## レビュー\n\n`;
+            prContent += `| 項目 | 内容 |\n`;
+            prContent += `|------|------|\n`;
+            if (details.approved_by.length > 0) {
+              prContent += `| 承認者 | ${details.approved_by.map(r => '@' + r).join(', ')} |\n`;
+            } else {
+              prContent += `| 承認者 | - |\n`;
+            }
+            if (details.reviewers.length > 0) {
+              prContent += `| レビュー参加者 | ${details.reviewers.map(r => '@' + r).join(', ')} |\n`;
+            }
+            prContent += `\n`;
+
+            prContent += `## 概要\n\n`;
+            prContent += details.body || '_説明なし_';
+            prContent += `\n\n`;
+
+            prContent += `## コミット一覧\n\n`;
+            for (const commit of details.commits) {
+              prContent += `- \`${commit.sha}\` ${commit.message}\n`;
+            }
+            prContent += `\n`;
+
+            prContent += `## 変更ファイル\n\n`;
+            prContent += `| ファイル | 状態 | 変更量 |\n`;
+            prContent += `|----------|------|--------|\n`;
+            for (const file of details.files) {
+              const status = file.status === 'added' ? '追加' :
+                             file.status === 'removed' ? '削除' :
+                             file.status === 'renamed' ? '名前変更' : '変更';
+              prContent += `| \`${file.name}\` | ${status} | +${file.additions}/-${file.deletions} |\n`;
+            }
+            prContent += `\n`;
+
+            // Add code definitions if available (with full docstrings)
+            if (fs.existsSync('code-definitions.json')) {
+              const codeDefs = JSON.parse(fs.readFileSync('code-definitions.json', 'utf8'));
+              const hasModifiedDefs = Object.keys(codeDefs.modified).length > 0;
+
+              if (hasModifiedDefs) {
+                prContent += `## 追加・変更された関数/クラス\n\n`;
+
+                for (const [file, defs] of Object.entries(codeDefs.modified)) {
+                  prContent += `### \`${file}\`\n\n`;
+
+                  for (const def of defs) {
+                    if (def.type === 'function') {
+                      prContent += `#### 関数: \`${def.name}\`\n\n`;
+                      prContent += `- **行番号**: ${def.line}\n`;
+                      prContent += `- **シグネチャ**: \`${def.name}${def.signature || '()'}\`\n`;
+                      if (def.docstring) {
+                        prContent += `- **説明**:\n\`\`\`\n${def.docstring}\n\`\`\`\n`;
+                      } else {
+                        prContent += `- **説明**: _なし_\n`;
+                      }
+                      prContent += `\n`;
+                    } else if (def.type === 'class') {
+                      prContent += `#### クラス: \`${def.name}\`\n\n`;
+                      prContent += `- **行番号**: ${def.line}\n`;
+                      if (def.docstring) {
+                        prContent += `- **説明**:\n\`\`\`\n${def.docstring}\n\`\`\`\n`;
+                      } else {
+                        prContent += `- **説明**: _なし_\n`;
+                      }
+
+                      if (def.methods && def.methods.length > 0) {
+                        prContent += `- **メソッド**:\n`;
+                        for (const method of def.methods) {
+                          prContent += `  - \`${method.name}${method.signature || '()'}\``;
+                          if (method.docstring) {
+                            const firstLine = method.docstring.split('\\n')[0];
+                            prContent += `: ${firstLine}`;
+                          }
+                          prContent += `\n`;
+                        }
+                      }
+                      prContent += `\n`;
+                    }
+                  }
+                }
+              }
+            }
+
+            // Add code diff for each file
+            prContent += `## コード差分\n\n`;
+            for (const file of details.files) {
+              if (file.patch) {
+                prContent += `### \`${file.name}\`\n\n`;
+                prContent += `\`\`\`diff\n${file.patch}\n\`\`\`\n\n`;
+              }
+            }
+
+            const prFilename = `${dateStr}_PR${details.number}.md`;
+            const prFilepath = path.join(prDir, prFilename);
+            fs.writeFileSync(prFilepath, prContent);
+            console.log(`Created ${prFilepath}`);
+
+            // 3. Generate test results file
+            let testContent = `# テスト結果: PR #${details.number}\n\n`;
+            testContent += `| 項目 | 内容 |\n`;
+            testContent += `|------|------|\n`;
+            testContent += `| PR番号 | #${details.number} |\n`;
+            testContent += `| 実行日 | ${dateStr} |\n\n`;
+
+            // Try to parse test results XML
+            if (fs.existsSync('test-results.xml')) {
+              const xml = fs.readFileSync('test-results.xml', 'utf8');
+
+              // Parse summary
+              const testsMatch = xml.match(/testsuite[^>]*tests="(\d+)"/);
+              const failuresMatch = xml.match(/testsuite[^>]*failures="(\d+)"/);
+              const errorsMatch = xml.match(/testsuite[^>]*errors="(\d+)"/);
+              const skippedMatch = xml.match(/testsuite[^>]*skipped="(\d+)"/);
+
+              const tests = testsMatch ? parseInt(testsMatch[1]) : 0;
+              const failures = failuresMatch ? parseInt(failuresMatch[1]) : 0;
+              const errors = errorsMatch ? parseInt(errorsMatch[1]) : 0;
+              const skipped = skippedMatch ? parseInt(skippedMatch[1]) : 0;
+              const passed = tests - failures - errors - skipped;
+
+              testContent += `## テスト結果サマリー\n\n`;
+              testContent += `| 項目 | 結果 |\n`;
+              testContent += `|------|------|\n`;
+              testContent += `| 総テスト数 | ${tests} |\n`;
+              testContent += `| 成功 | ${passed} |\n`;
+              testContent += `| 失敗 | ${failures + errors} |\n`;
+              testContent += `| スキップ | ${skipped} |\n\n`;
+
+              // Parse individual test cases
+              const testcaseRegex = /<testcase\s+([^>]*)>([\s\S]*?)<\/testcase>|<testcase\s+([^>]*)\/>/g;
+              const testCases = [];
+              let match;
+
+              while ((match = testcaseRegex.exec(xml)) !== null) {
+                const attrs = match[1] || match[3];
+                const content = match[2] || '';
+
+                const nameMatch = attrs.match(/name="([^"]*)"/);
+                const classMatch = attrs.match(/classname="([^"]*)"/);
+                const timeMatch = attrs.match(/time="([^"]*)"/);
+
+                const hasFailure = content.includes('<failure') || content.includes('<error');
+                const hasSkip = content.includes('<skipped');
+
+                let status = '成功';
+                let message = '';
+                if (hasFailure) {
+                  status = '失敗';
+                  const msgMatch = content.match(/message="([^"]*)"/);
+                  message = msgMatch ? msgMatch[1] : '';
+                } else if (hasSkip) {
+                  status = 'スキップ';
+                }
+
+                testCases.push({
+                  name: nameMatch ? nameMatch[1] : 'unknown',
+                  classname: classMatch ? classMatch[1] : '',
+                  time: timeMatch ? parseFloat(timeMatch[1]) : 0,
+                  status,
+                  message
+                });
+              }
+
+              if (testCases.length > 0) {
+                testContent += `## テストケース詳細\n\n`;
+                testContent += `| テスト名 | クラス/モジュール | 結果 | 実行時間 |\n`;
+                testContent += `|----------|------------------|------|----------|\n`;
+
+                // Show failed tests first
+                const failedTests = testCases.filter(t => t.status === '失敗');
+                const skippedTests = testCases.filter(t => t.status === 'スキップ');
+                const passedTests = testCases.filter(t => t.status === '成功');
+
+                for (const t of failedTests) {
+                  testContent += `| \`${t.name}\` | ${t.classname} | ❌ ${t.status} | ${t.time.toFixed(3)}s |\n`;
+                }
+                for (const t of skippedTests) {
+                  testContent += `| \`${t.name}\` | ${t.classname} | ⏭️ ${t.status} | ${t.time.toFixed(3)}s |\n`;
+                }
+                for (const t of passedTests) {
+                  testContent += `| \`${t.name}\` | ${t.classname} | ✅ ${t.status} | ${t.time.toFixed(3)}s |\n`;
+                }
+
+                // Show failure details
+                if (failedTests.length > 0) {
+                  testContent += `\n## 失敗したテストの詳細\n\n`;
+                  for (const t of failedTests) {
+                    testContent += `### \`${t.name}\`\n\n`;
+                    testContent += `- **クラス**: ${t.classname}\n`;
+                    if (t.message) {
+                      testContent += `- **エラー**: \`${t.message}\`\n`;
+                    }
+                    testContent += `\n`;
+                  }
+                }
+              }
+            } else {
+              testContent += `## テスト結果サマリー\n\n`;
+              testContent += `_テスト結果が見つかりませんでした_\n`;
+            }
+
+            const testFilename = `${dateStr}_PR${details.number}.md`;
+            const testFilepath = path.join(testsDir, testFilename);
+            fs.writeFileSync(testFilepath, testContent);
+            console.log(`Created ${testFilepath}`);
+
+            // 4. Update RELEASE_NOTES.md (user-friendly release notes)
+            const releaseNotesPath = path.join(baseDir, 'RELEASE_NOTES.md');
+            let releaseNotes = '';
+
+            if (fs.existsSync(releaseNotesPath)) {
+              releaseNotes = fs.readFileSync(releaseNotesPath, 'utf8');
+            } else {
+              releaseNotes = '# リリースノート\n\nこのプロジェクトの変更履歴をユーザー向けにまとめています。\n\n';
+            }
+
+            // Determine user-friendly change type
+            let releaseType = 'その他';
+            let releaseIcon = '📝';
+            if (type === 'Added') {
+              releaseType = '新機能';
+              releaseIcon = '✨';
+            } else if (type === 'Fixed') {
+              releaseType = 'バグ修正';
+              releaseIcon = '🐛';
+            } else if (type === 'Changed' || type === 'Performance') {
+              releaseType = '改善';
+              releaseIcon = '⚡';
+            } else if (type === 'Docs') {
+              releaseType = 'ドキュメント';
+              releaseIcon = '📚';
+            }
+
+            // Extract summary from PR body (first paragraph or first 200 chars)
+            let summary = details.body || cleanTitle;
+            // Remove markdown headers and get first meaningful paragraph
+            summary = summary.replace(/^#+\s+.*/gm, '').trim();
+            const firstParagraph = summary.split('\n\n')[0];
+            summary = firstParagraph.length > 300 ? firstParagraph.slice(0, 300) + '...' : firstParagraph;
+            summary = summary.replace(/\n/g, ' ').trim() || cleanTitle;
+
+            // Find or create today's section
+            const releaseDateHeader = `## ${dateStr}`;
+            if (!releaseNotes.includes(releaseDateHeader)) {
+              const headerEnd = releaseNotes.indexOf('\n\n', releaseNotes.indexOf('# リリースノート'));
+              const beforeHeader = releaseNotes.slice(0, headerEnd + 2);
+              const afterHeader = releaseNotes.slice(headerEnd + 2);
+              releaseNotes = beforeHeader + `${releaseDateHeader}\n\n` + afterHeader;
+            }
+
+            // Add entry under today's section
+            const releaseEntry = `### ${releaseIcon} ${releaseType}: ${cleanTitle}\n\n${summary}\n\n[詳細 →](pr/${dateStr}_PR${details.number}.md) | [PR #${details.number}](https://github.com/${process.env.GITHUB_REPOSITORY}/pull/${details.number})\n\n---\n\n`;
+
+            const releaseSectionStart = releaseNotes.indexOf(releaseDateHeader);
+            const releaseInsertPos = releaseNotes.indexOf('\n', releaseSectionStart) + 2;
+            releaseNotes = releaseNotes.slice(0, releaseInsertPos) + releaseEntry + releaseNotes.slice(releaseInsertPos);
+
+            fs.writeFileSync(releaseNotesPath, releaseNotes);
+            console.log(`Updated ${releaseNotesPath}`);
+
+      - name: Commit and Push
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add docs/更新履歴/
+          git diff --staged --quiet || git commit -m "docs: PR #${{ github.event.pull_request.number }} の更新履歴を追加"
+          git push

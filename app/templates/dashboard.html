@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+
+{% block title %}ダッシュボード - POL Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1><i class="bi bi-speedometer2"></i> ダッシュボード</h1>
+</div>
+
+<!-- Resource Stats -->
+<div class="resource-stats-card mb-2">
+    <div class="resource-stats-header">
+        <span><i class="bi bi-bar-chart"></i> リソース状況</span>
+        <div class="resource-stats-meta">
+            <small><i class="bi bi-clock"></i> <span id="uptime">--</span></small>
+            <button class="btn-icon" id="refresh-resources" type="button" title="更新">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+    </div>
+    <div class="resource-stats-body">
+        <div class="resource-stat-row info">
+            <div class="resource-stat-info">
+                <i class="bi bi-cpu"></i>
+                <span class="resource-stat-name">CPU</span>
+                <span class="resource-stat-detail" id="cpu-detail">-- コア</span>
+            </div>
+            <div class="resource-stat-bar">
+                <progress id="cpu-progress" value="0" max="100"></progress>
+            </div>
+            <div class="resource-stat-value"><span id="cpu-percent">--</span>%</div>
+        </div>
+        <div class="resource-stat-row success">
+            <div class="resource-stat-info">
+                <i class="bi bi-memory"></i>
+                <span class="resource-stat-name">メモリ</span>
+                <span class="resource-stat-detail" id="memory-detail">-- / -- GB</span>
+            </div>
+            <div class="resource-stat-bar">
+                <progress id="memory-progress" value="0" max="100"></progress>
+            </div>
+            <div class="resource-stat-value"><span id="memory-percent">--</span>%</div>
+        </div>
+        <div id="disks-container"></div>
+    </div>
+</div>
+
+<!-- App Status -->
+<div class="table-card">
+    <div class="d-flex justify-between align-center mb-1">
+        <h2 style="margin: 0;"><i class="bi bi-grid-3x3-gap"></i> アプリケーション状態</h2>
+        <button id="refresh-apps" class="btn-outline" type="button" style="padding: 0.3rem 0.6rem; font-size: 0.85rem;">
+            <i class="bi bi-arrow-clockwise"></i> 更新
+        </button>
+    </div>
+    <table class="table-modern">
+        <thead>
+            <tr>
+                <th>アプリ名</th>
+                <th>バージョン</th>
+                <th>状態</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody id="apps-table">
+            <tr>
+                <td colspan="4">読み込み中...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var isAdmin = {{ 'true' if current_user.is_admin else 'false' }};
+
+    function loadResources() {
+        fetch('/resources/api/status')
+            .then(response => response.json())
+            .then(data => {
+                // CPU
+                var cpuVal = data.cpu.percent.toFixed(1);
+                document.getElementById('cpu-percent').textContent = cpuVal;
+                document.getElementById('cpu-progress').value = data.cpu.percent;
+                document.getElementById('cpu-detail').textContent =
+                    data.cpu.count + 'コア / ' + data.cpu.count_logical + 'スレッド';
+
+                // Memory
+                var memVal = data.memory.percent.toFixed(1);
+                document.getElementById('memory-percent').textContent = memVal;
+                document.getElementById('memory-progress').value = data.memory.percent;
+                document.getElementById('memory-detail').textContent =
+                    '使用 ' + data.memory.used_gb + ' / 全体 ' + data.memory.total_gb + ' GB';
+
+                // Disks
+                var disksContainer = document.getElementById('disks-container');
+                disksContainer.innerHTML = '';
+
+                data.disks.forEach(function(disk) {
+                    var diskDiv = document.createElement('div');
+                    diskDiv.className = 'resource-stat-row warning';
+                    diskDiv.innerHTML =
+                        '<div class="resource-stat-info">' +
+                            '<i class="bi bi-hdd"></i>' +
+                            '<span class="resource-stat-name">' + disk.path + '</span>' +
+                            '<span class="resource-stat-detail">使用 ' + disk.used_gb + ' / 全体 ' + disk.total_gb + ' GB</span>' +
+                        '</div>' +
+                        '<div class="resource-stat-bar">' +
+                            '<progress value="' + disk.percent + '" max="100"></progress>' +
+                        '</div>' +
+                        '<div class="resource-stat-value">' + disk.percent.toFixed(1) + '%</div>';
+                    disksContainer.appendChild(diskDiv);
+                });
+
+                // System
+                document.getElementById('uptime').textContent = data.system.uptime;
+            })
+            .catch(function(error) {
+                console.error('リソース情報の取得に失敗:', error);
+            });
+    }
+
+    function getStatusBadge(status, installed) {
+        if (!installed) {
+            return '<span class="badge badge-secondary">未インストール</span>';
+        }
+        var map = {
+            'running': { cls: 'badge-success', label: '実行中' },
+            'stopped': { cls: 'badge-secondary', label: '停止' },
+            'error':   { cls: 'badge-danger', label: 'エラー' },
+            'unknown': { cls: 'badge-warning', label: '不明' }
+        };
+        var info = map[status] || { cls: 'badge-secondary', label: status };
+        return '<span class="badge ' + info.cls + '">' + info.label + '</span>';
+    }
+
+    function loadApps() {
+        fetch('/apps/api/status')
+            .then(response => response.json())
+            .then(data => {
+                var tbody = document.getElementById('apps-table');
+                tbody.innerHTML = '';
+
+                data.forEach(function(app) {
+                    var tr = document.createElement('tr');
+                    var actions = '';
+
+                    if (!app.installed) {
+                        // 未インストール時: インストールボタン（管理者のみ）
+                        if (isAdmin) {
+                            actions += '<button class="btn-icon" onclick="installApp(\'' + app.id + '\')" title="インストール" type="button"><i class="bi bi-download"></i></button>';
+                        }
+                    } else {
+                        // インストール済み: 起動/停止/再起動/更新ボタン
+                        if (app.status !== 'running') {
+                            actions += '<button class="btn-icon" onclick="appAction(\'' + app.id + '\', \'start\')" title="起動" type="button"><i class="bi bi-play-fill"></i></button>';
+                        }
+                        if (app.status === 'running') {
+                            actions += '<button class="btn-icon" onclick="appAction(\'' + app.id + '\', \'stop\')" title="停止" type="button"><i class="bi bi-stop-fill"></i></button>';
+                        }
+                        actions += '<button class="btn-icon" onclick="appAction(\'' + app.id + '\', \'restart\')" title="再起動" type="button"><i class="bi bi-arrow-repeat"></i></button>';
+
+                        // 更新ボタン（管理者のみ）
+                        if (isAdmin) {
+                            actions += '<button class="btn-icon" onclick="checkAndUpdate(\'' + app.id + '\')" title="更新確認" type="button"><i class="bi bi-cloud-download"></i></button>';
+                        }
+                    }
+
+                    // アプリ名列に詳細ボタンを左に配置
+                    var appNameCell = '<a href="/apps/' + app.id + '" class="btn-icon" title="詳細"><i class="bi bi-info-circle"></i></a>';
+
+                    // インストール済みの場合はプロキシ経由でアプリ画面へ、未インストールは詳細ページへ
+                    if (app.installed) {
+                        appNameCell += '<a href="/proxy/' + app.id + '/" target="_blank"><strong>' + app.name + '</strong> <i class="bi bi-box-arrow-up-right" style="font-size: 0.75rem;"></i></a>';
+                    } else {
+                        appNameCell += '<a href="/apps/' + app.id + '"><strong>' + app.name + '</strong></a>';
+                    }
+
+                    tr.innerHTML =
+                        '<td class="app-name-cell">' + appNameCell + '</td>' +
+                        '<td>' + (app.installed_version || '-') + '</td>' +
+                        '<td>' + getStatusBadge(app.status, app.installed) + '</td>' +
+                        '<td class="actions-cell">' + actions + '</td>';
+                    tbody.appendChild(tr);
+                });
+            })
+            .catch(function(error) {
+                console.error('アプリ状態の取得に失敗:', error);
+                document.getElementById('apps-table').innerHTML =
+                    '<tr><td colspan="4">取得に失敗しました</td></tr>';
+            });
+    }
+
+    window.appAction = function(appId, action) {
+        fetch('/apps/api/' + appId + '/' + action, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                loadApps();
+            } else {
+                alert('エラー: ' + data.message);
+            }
+        })
+        .catch(function(error) {
+            console.error('操作に失敗:', error);
+            alert('操作に失敗しました');
+        });
+    };
+
+    window.installApp = function(appId) {
+        if (!confirm('このアプリをインストールしますか？')) return;
+
+        fetch('/apps/api/' + appId + '/install', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                loadApps();
+            } else {
+                alert('エラー: ' + data.message);
+            }
+        })
+        .catch(function(error) {
+            console.error('インストールに失敗:', error);
+            alert('インストールに失敗しました');
+        });
+    };
+
+    window.checkAndUpdate = function(appId) {
+        // まず更新確認
+        fetch('/apps/api/' + appId + '/check-update')
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('エラー: ' + data.error);
+                    return;
+                }
+
+                if (!data.has_update) {
+                    alert('最新バージョンです（' + data.current_version + '）');
+                    return;
+                }
+
+                // 更新がある場合は確認ダイアログ
+                if (confirm('新バージョン ' + data.latest_version + ' が利用可能です。\n現在: ' + data.current_version + '\n\nアップデートしますか？')) {
+                    fetch('/apps/api/' + appId + '/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    })
+                    .then(response => response.json())
+                    .then(result => {
+                        if (result.success) {
+                            alert(result.message);
+                            loadApps();
+                        } else {
+                            alert('エラー: ' + result.message);
+                        }
+                    })
+                    .catch(function(error) {
+                        console.error('アップデートに失敗:', error);
+                        alert('アップデートに失敗しました');
+                    });
+                }
+            })
+            .catch(function(error) {
+                console.error('更新確認に失敗:', error);
+                alert('更新確認に失敗しました');
+            });
+    };
+
+    loadResources();
+    loadApps();
+
+    document.getElementById('refresh-resources').addEventListener('click', loadResources);
+    document.getElementById('refresh-apps').addEventListener('click', loadApps);
+});
+</script>
+{% endblock %}

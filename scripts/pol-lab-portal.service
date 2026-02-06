@@ -1,0 +1,38 @@
+[Unit]
+Description=POL Lab Portal - IoT Resource Management System
+Documentation=https://github.com/Neopolalis/pol-lab-portal
+After=network.target
+
+[Service]
+Type=simple
+User=polalis
+Group=polalis
+WorkingDirectory=/opt/polalis/pol-lab-portal
+
+# 環境変数
+Environment="PATH=/opt/polalis/pol-lab-portal/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="FLASK_APP=app"
+
+# アプリケーション起動
+ExecStart=/opt/polalis/pol-lab-portal/.venv/bin/python -m flask run --host=0.0.0.0 --port=8000
+
+# 再起動設定
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+# セキュリティ設定
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/polalis
+
+# ログ設定
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pol-lab-portal
+
+[Install]
+WantedBy=multi-user.target

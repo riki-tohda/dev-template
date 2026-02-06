@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}ログイン - POL Portal{% endblock %}
+
+{% block layout %}
+<!-- Flash Messages for Login Page -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        <div style="position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); z-index: 9999; width: 90%; max-width: 400px;">
+            {% for category, message in messages %}
+            <div class="flash-message flash-{{ category }}">
+                {% if category == 'success' %}<i class="bi bi-check-circle"></i>
+                {% elif category == 'error' %}<i class="bi bi-exclamation-circle"></i>
+                {% elif category == 'warning' %}<i class="bi bi-exclamation-triangle"></i>
+                {% else %}<i class="bi bi-info-circle"></i>
+                {% endif %}
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+{% endwith %}
+
+<div class="login-wrapper">
+    <div class="login-card">
+        <div class="login-card-header">
+            <i class="bi bi-app-indicator" style="font-size: 2rem;"></i>
+            <h1>POL Lab Portal</h1>
+            <p>ログインしてください</p>
+        </div>
+        <div class="login-card-body">
+            <form method="post">
+                <label for="username">ユーザー名</label>
+                <input type="text" id="username" name="username" required autofocus
+                       placeholder="ユーザー名を入力">
+
+                <label for="password" style="margin-top: 1rem;">パスワード</label>
+                <input type="password" id="password" name="password" required
+                       placeholder="パスワードを入力">
+
+                <button type="submit">
+                    <i class="bi bi-box-arrow-in-right"></i> ログイン
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

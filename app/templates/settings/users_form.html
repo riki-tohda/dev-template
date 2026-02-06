@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if mode == 'add' %}ユーザー追加{% else %}ユーザー編集{% endif %} - POL Portal
+{% endblock %}
+
+{% block content %}
+<ul class="breadcrumb">
+    <li><a href="{{ url_for('settings.index') }}">設定</a></li>
+    <li><a href="{{ url_for('settings.users') }}">ユーザー管理</a></li>
+    <li>{% if mode == 'add' %}ユーザー追加{% else %}ユーザー編集{% endif %}</li>
+</ul>
+
+<div class="page-header">
+    <h1>
+        <i class="bi bi-{{ 'person-plus' if mode == 'add' else 'person-gear' }}"></i>
+        {% if mode == 'add' %}ユーザー追加{% else %}ユーザー編集{% endif %}
+    </h1>
+</div>
+
+<div class="setting-section">
+    <div class="setting-section-header">
+        <i class="bi bi-{{ 'person-plus' if mode == 'add' else 'person-gear' }}"></i>
+        <span>{% if mode == 'add' %}ユーザー追加{% else %}ユーザー編集{% endif %}</span>
+    </div>
+    <div class="setting-section-body">
+        <form method="post">
+            <label for="username">ユーザー名</label>
+            <input type="text" id="username" name="username"
+                   value="{% if user %}{{ user.username }}{% endif %}"
+                   pattern="[a-zA-Z0-9_]+" minlength="3" maxlength="32" required>
+            <small class="form-hint">3-32文字、英数字とアンダースコアのみ</small>
+
+            {% if mode == 'add' %}
+            <label for="password">パスワード</label>
+            <input type="password" id="password" name="password"
+                   minlength="4" required>
+            <small class="form-hint">4文字以上</small>
+            {% else %}
+            <label for="new_password">新しいパスワード（変更する場合のみ）</label>
+            <input type="password" id="new_password" name="new_password"
+                   minlength="4">
+            <small class="form-hint">4文字以上。空欄の場合は変更しません。</small>
+            {% endif %}
+
+            <fieldset>
+                <legend>権限</legend>
+                <label for="role_admin">
+                    <input type="radio" id="role_admin" name="role" value="admin"
+                           {% if user and user.role == 'admin' %}checked{% endif %}>
+                    管理者（全機能にアクセス可能）
+                </label>
+                <label for="role_user">
+                    <input type="radio" id="role_user" name="role" value="user"
+                           {% if not user or user.role == 'user' %}checked{% endif %}>
+                    一般ユーザー（設定変更不可）
+                </label>
+            </fieldset>
+
+            {% if mode == 'edit' %}
+            <label for="enabled">
+                <input type="checkbox" id="enabled" name="enabled"
+                       {% if user.enabled %}checked{% endif %}>
+                アカウントを有効にする
+            </label>
+            {% endif %}
+
+            <div class="btn-group mt-2">
+                <button type="submit">
+                    <i class="bi bi-{{ 'plus-circle' if mode == 'add' else 'check-circle' }}"></i>
+                    {% if mode == 'add' %}追加{% else %}更新{% endif %}
+                </button>
+                <a href="{{ url_for('settings.users') }}" class="btn-outline-secondary">
+                    <i class="bi bi-x-circle"></i> キャンセル
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

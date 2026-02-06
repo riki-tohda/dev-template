@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}リソース監視設定 - POL Portal{% endblock %}
+
+{% block content %}
+<ul class="breadcrumb">
+    <li><a href="{{ url_for('settings.index') }}">設定</a></li>
+    <li>リソース監視設定</li>
+</ul>
+
+<div class="page-header">
+    <h1><i class="bi bi-cpu"></i> リソース監視設定</h1>
+</div>
+
+<div class="setting-section">
+    <div class="setting-section-header">
+        <i class="bi bi-exclamation-triangle"></i>
+        <span>警告閾値</span>
+    </div>
+    <div class="setting-section-body">
+        <form method="post">
+            <label for="cpu_threshold">CPU使用率 警告閾値（%）</label>
+            <input type="number" id="cpu_threshold" name="cpu_threshold"
+                   value="{{ settings.cpu_threshold }}"
+                   min="1" max="100" required>
+
+            <label for="memory_threshold">メモリ使用率 警告閾値（%）</label>
+            <input type="number" id="memory_threshold" name="memory_threshold"
+                   value="{{ settings.memory_threshold }}"
+                   min="1" max="100" required>
+
+            <label for="disk_threshold">ディスク使用率 警告閾値（%）</label>
+            <input type="number" id="disk_threshold" name="disk_threshold"
+                   value="{{ settings.disk_threshold }}"
+                   min="1" max="100" required>
+
+            <button type="submit"><i class="bi bi-save"></i> 保存</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

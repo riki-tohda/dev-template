@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}セッション設定 - POL Portal{% endblock %}
+
+{% block content %}
+<ul class="breadcrumb">
+    <li><a href="{{ url_for('settings.index') }}">設定</a></li>
+    <li>セッション設定</li>
+</ul>
+
+<div class="page-header">
+    <h1><i class="bi bi-clock-history"></i> セッション設定</h1>
+</div>
+
+<div class="setting-section">
+    <div class="setting-section-header">
+        <i class="bi bi-clock-history"></i>
+        <span>セッション設定</span>
+    </div>
+    <div class="setting-section-body">
+        <form method="post">
+            <label for="lifetime_hours">セッション有効時間（時間）</label>
+            <input type="number" id="lifetime_hours" name="lifetime_hours"
+                   value="{{ settings.lifetime_hours }}"
+                   min="1" max="168" required>
+            <small class="form-hint">1-168時間（1週間）の範囲で指定</small>
+
+            <button type="submit"><i class="bi bi-save"></i> 保存</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

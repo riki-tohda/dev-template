@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}設定 - POL Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1><i class="bi bi-gear"></i> 設定</h1>
+</div>
+
+<div class="settings-grid">
+    <div class="settings-card">
+        <h3><i class="bi bi-hdd-network"></i> サーバー設定</h3>
+        <p>ポート番号などの設定</p>
+        <div class="card-action">
+            <a href="{{ url_for('settings.server') }}" class="btn-outline" style="padding: 0.4rem 1rem;">
+                <i class="bi bi-pencil-square"></i> 設定
+            </a>
+        </div>
+    </div>
+
+    <div class="settings-card">
+        <h3><i class="bi bi-clock-history"></i> セッション設定</h3>
+        <p>セッション有効時間の設定</p>
+        <div class="card-action">
+            <a href="{{ url_for('settings.session') }}" class="btn-outline" style="padding: 0.4rem 1rem;">
+                <i class="bi bi-pencil-square"></i> 設定
+            </a>
+        </div>
+    </div>
+
+    <div class="settings-card">
+        <h3><i class="bi bi-people"></i> ユーザー管理</h3>
+        <p>ユーザーの追加・編集・削除</p>
+        <div class="card-action">
+            <a href="{{ url_for('settings.users') }}" class="btn-outline" style="padding: 0.4rem 1rem;">
+                <i class="bi bi-pencil-square"></i> 管理
+            </a>
+        </div>
+    </div>
+
+    <div class="settings-card">
+        <h3><i class="bi bi-cpu"></i> リソース監視設定</h3>
+        <p>警告閾値の設定</p>
+        <div class="card-action">
+            <a href="{{ url_for('settings.resource') }}" class="btn-outline" style="padding: 0.4rem 1rem;">
+                <i class="bi bi-pencil-square"></i> 設定
+            </a>
+        </div>
+    </div>
+
+    <div class="settings-card">
+        <h3><i class="bi bi-download"></i> アプリインストール設定</h3>
+        <p>インストール先ディレクトリの設定</p>
+        <div class="card-action">
+            <a href="{{ url_for('settings.app_install') }}" class="btn-outline" style="padding: 0.4rem 1rem;">
+                <i class="bi bi-pencil-square"></i> 設定
+            </a>
+        </div>
+    </div>
+
+    <div class="settings-card">
+        <h3><i class="bi bi-key"></i> パスワード変更</h3>
+        <p>自分のパスワードを変更</p>
+        <div class="card-action">
+            <a href="{{ url_for('settings.profile_password') }}" class="btn-outline" style="padding: 0.4rem 1rem;">
+                <i class="bi bi-pencil-square"></i> 変更
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

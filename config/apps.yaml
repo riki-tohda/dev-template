@@ -1,0 +1,48 @@
+# =====================================================
+# アプリケーションカタログ（利用可能なアプリ一覧）
+# =====================================================
+
+applications:
+  - id: "label-printer"
+    name: "ラベル印刷指示アプリ"
+    description: "医療ラベルの印刷指示を管理"
+
+    # GitHub設定
+    github_owner: "Neopolalis"
+    github_repo: "pol-label-printer"
+
+    # ローカル設定（インストール後に使用）
+    service_name: "pol-label-printer"
+    port: 8001
+    health_check_path: "/health"
+    auto_restart: true
+
+  - id: "file-transfer"
+    name: "ファイル転送アプリ"
+    description: "ファイルの転送処理を管理"
+    github_owner: "Neopolalis"
+    github_repo: "pol-file-transfer"
+    service_name: "pol-file-transfer"
+    port: 8002
+    health_check_path: "/health"
+    auto_restart: true
+
+  - id: "file-sync"
+    name: "ファイル送受信アプリ"
+    description: "ファイルの送受信を管理"
+    github_owner: "Neopolalis"
+    github_repo: "pol-file-sync"
+    service_name: "pol-file-sync"
+    port: 8003
+    health_check_path: "/health"
+    auto_restart: true
+
+  - id: "me-integration"
+    name: "ME連携アプリ"
+    description: "MEシステムとの連携を管理"
+    github_owner: "Neopolalis"
+    github_repo: "pol-me-integration"
+    service_name: "pol-me-integration"
+    port: 8004
+    health_check_path: "/health"
+    auto_restart: true

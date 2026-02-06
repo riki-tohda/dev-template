@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}アプリインストール設定 - POL Portal{% endblock %}
+
+{% block content %}
+<ul class="breadcrumb">
+    <li><a href="{{ url_for('settings.index') }}">設定</a></li>
+    <li>アプリインストール設定</li>
+</ul>
+
+<div class="page-header">
+    <h1><i class="bi bi-download"></i> アプリインストール設定</h1>
+</div>
+
+<div class="setting-section">
+    <div class="setting-section-header">
+        <i class="bi bi-folder"></i>
+        <span>インストール先</span>
+    </div>
+    <div class="setting-section-body">
+        <form method="post">
+            <label for="install_dir">インストール先ディレクトリ</label>
+            <input type="text" id="install_dir" name="install_dir"
+                   value="{{ settings.install_dir }}" required>
+            <small class="form-hint">アプリケーションがインストールされるディレクトリ</small>
+
+            <label for="github_api_url" style="margin-top: 1rem;">GitHub API URL</label>
+            <input type="url" id="github_api_url" name="github_api_url"
+                   value="{{ settings.github_api_url }}" required>
+            <small class="form-hint">GitHub Enterprise の場合: <code>https://&lt;HOSTNAME&gt;/api/v3</code></small>
+
+            <button type="submit"><i class="bi bi-save"></i> 保存</button>
+        </form>
+    </div>
+</div>
+
+<div class="setting-section">
+    <div class="setting-section-header">
+        <i class="bi bi-github"></i>
+        <span>GitHub Token</span>
+    </div>
+    <div class="setting-section-body">
+        <p>
+            GitHub Personal Access Token は環境変数 <code>POL_GITHUB_TOKEN</code> で設定してください。
+            セキュリティのため、Web UIからは変更できません。
+        </p>
+    </div>
+</div>
+{% endblock %}

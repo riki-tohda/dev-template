@@ -1,0 +1,78 @@
+# =====================================================
+# POL統合ポータル システム設定
+# =====================================================
+
+# ----- サーバー設定 -----
+server:
+  host: "0.0.0.0"           # バインドアドレス
+  port: 8000                # ポート番号
+  debug: false              # デバッグモード（本番はfalse）
+
+# ----- セッション設定 -----
+session:
+  lifetime_hours: 24        # セッション有効時間（時間）
+
+# ----- 認証設定 -----
+auth:
+  # 初期ユーザー（初回起動時にDBに登録）
+  # パスワードは平文で記載し、初回起動時にbcryptハッシュ化
+  initial_users:
+    - username: "admin"
+      password: "polalis"
+      role: "admin"         # admin または user
+    - username: "user"
+      password: "polalis"
+      role: "user"
+
+# ----- リソースモニタ設定 -----
+resource_monitor:
+  # 監視対象ディスクパス（OS別設定）
+  disk_paths:
+    windows: ["C:\\"]
+    linux: ["/"]
+
+  # 警告閾値（%）
+  warning_thresholds:
+    cpu_percent: 80
+    memory_percent: 80
+    disk_percent: 90
+
+# ----- アプリインストール設定 -----
+app_install:
+  # GitHub API URL（GitHub Enterprise の場合は https://<HOSTNAME>/api/v3）
+  github_api_url: "https://api.github.com"
+  # ローカルインストール先ディレクトリ（OS別設定）
+  install_dir:
+    windows: "C:\\pol-apps"
+    linux: "/opt/pol-apps"
+  # ※ GitHub tokenは環境変数で管理
+
+# ----- ログ設定 -----
+# ディレクトリ構成: {directory}/YYYY-MM-DD/{app,resource,auth}.log
+logging:
+  level: "INFO"             # DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+  # ログディレクトリ
+  # - 相対パス: プロジェクトルートからの相対（例: "logs"）
+  # - 絶対パス: そのまま使用（例: "/var/log/pol-lab"）
+  directory: "logs"
+
+  # コンソール出力
+  console:
+    enabled: true
+
+  # サイズローテーション（1ファイルあたり）
+  max_size_mb: 10           # MB単位
+  backup_count: 3           # 世代数（.1, .2, .3）
+
+  # 保持期間
+  retention_days: 7         # ログ保持日数（超過でアーカイブへ）
+
+  # アーカイブ設定
+  archive:
+    enabled: true
+    directory: "archive"    # アーカイブディレクトリ（ログディレクトリからの相対）
+    retention_days: 30      # アーカイブ保持日数（超過で削除）
+
+  # フォルダサイズ上限
+  max_folder_size_mb: 500   # 超過時は古いファイルから削除

@@ -1,0 +1,290 @@
+{% extends "base.html" %}
+
+{% block title %}{{ app.name }} - POL Portal{% endblock %}
+
+{% block content %}
+<ul class="breadcrumb">
+    <li><a href="{{ url_for('dashboard.index') }}">ダッシュボード</a></li>
+    <li>{{ app.name }}</li>
+</ul>
+
+<div class="page-header">
+    <h1><i class="bi bi-app"></i> {{ app.name }}</h1>
+</div>
+
+<!-- Basic Info -->
+<div class="card-modern">
+    <div class="card-modern-header">
+        <i class="bi bi-info-circle"></i> 基本情報
+    </div>
+    <div class="card-modern-body">
+        <dl>
+            <dt>ID</dt>
+            <dd>{{ app.id }}</dd>
+
+            <dt>説明</dt>
+            <dd>{{ app.description }}</dd>
+
+            <dt>サービス名</dt>
+            <dd><code>{{ app.service_name }}</code></dd>
+
+            <dt>ポート</dt>
+            <dd>{{ app.port }}</dd>
+
+            <dt>ヘルスチェック</dt>
+            <dd><code>http://localhost:{{ app.port }}{{ app.health_check_path }}</code></dd>
+
+            <dt>自動再起動</dt>
+            <dd>
+                {% if app.auto_restart %}
+                <span class="badge badge-success">有効</span>
+                {% else %}
+                <span class="badge badge-secondary">無効</span>
+                {% endif %}
+            </dd>
+        </dl>
+    </div>
+</div>
+
+<!-- Status -->
+<div class="card-modern">
+    <div class="card-modern-header">
+        <i class="bi bi-activity"></i> 状態
+    </div>
+    <div class="card-modern-body">
+        <p>
+            状態: <strong id="app-status">--</strong>
+        </p>
+        <p>
+            サービス: <span id="service-active">--</span>
+        </p>
+        <p>
+            ヘルスチェック: <span id="health-check">--</span>
+        </p>
+
+        <div class="btn-group mt-2">
+            <button id="btn-start" class="btn-outline" type="button"><i class="bi bi-play"></i> 起動</button>
+            <button id="btn-stop" class="btn-outline" type="button"><i class="bi bi-stop"></i> 停止</button>
+            <button id="btn-restart" class="btn-outline" type="button"><i class="bi bi-arrow-repeat"></i> 再起動</button>
+            <button id="btn-refresh" class="btn-outline-secondary" type="button"><i class="bi bi-arrow-clockwise"></i> 更新</button>
+        </div>
+    </div>
+</div>
+
+{% if app.github_owner and app.github_repo %}
+<!-- GitHub -->
+<div class="card-modern">
+    <div class="card-modern-header">
+        <i class="bi bi-github"></i> GitHub
+    </div>
+    <div class="card-modern-body">
+        <p>
+            <i class="bi bi-link-45deg"></i> リポジトリ:
+            <a href="https://github.com/{{ app.github_owner }}/{{ app.github_repo }}" target="_blank">
+                {{ app.github_owner }}/{{ app.github_repo }}
+            </a>
+        </p>
+
+        {% if current_user.is_admin %}
+        <h3 class="mt-2">インストール管理</h3>
+        <p>
+            インストール状態:
+            {% if app.installed %}
+            <span class="badge badge-success">インストール済み</span>
+            <small>({{ app.installed_version }})</small>
+            {% else %}
+            <span class="badge badge-secondary">未インストール</span>
+            {% endif %}
+        </p>
+
+        <p id="update-status"></p>
+
+        <div class="btn-group mt-2">
+            {% if not app.installed %}
+            <button id="btn-install" class="btn-primary-modern" type="button"><i class="bi bi-download"></i> インストール</button>
+            {% else %}
+            <button id="btn-check-update" class="btn-outline" type="button"><i class="bi bi-search"></i> アップデート確認</button>
+            <button id="btn-update" class="btn-outline" type="button" disabled><i class="bi bi-cloud-download"></i> アップデート</button>
+            <button id="btn-uninstall" class="btn-outline-danger" type="button"><i class="bi bi-trash"></i> アンインストール</button>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var appId = '{{ app.id }}';
+
+    function getStatusLabel(status) {
+        var labels = {
+            'running': '実行中',
+            'stopped': '停止',
+            'error': 'エラー',
+            'unknown': '不明'
+        };
+        return labels[status] || status;
+    }
+
+    function loadStatus() {
+        fetch('/apps/api/' + appId + '/status')
+            .then(response => response.json())
+            .then(data => {
+                var statusEl = document.getElementById('app-status');
+                statusEl.textContent = getStatusLabel(data.status);
+                statusEl.className = 'status-' + data.status;
+
+                document.getElementById('service-active').textContent =
+                    data.service_active ? 'アクティブ' : '非アクティブ';
+
+                if (data.health_check_ok === null) {
+                    document.getElementById('health-check').textContent = '-';
+                } else {
+                    document.getElementById('health-check').textContent =
+                        data.health_check_ok ? 'OK' : 'NG';
+                }
+
+                document.getElementById('btn-start').disabled = data.status === 'running';
+                document.getElementById('btn-stop').disabled = data.status === 'stopped';
+            })
+            .catch(function(error) {
+                console.error('状態の取得に失敗:', error);
+            });
+    }
+
+    function doAction(action) {
+        fetch('/apps/api/' + appId + '/' + action, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(response => response.json())
+        .then(data => {
+            alert(data.message);
+            if (data.success) {
+                setTimeout(loadStatus, 1000);
+            }
+        })
+        .catch(function(error) {
+            console.error('操作に失敗:', error);
+            alert('操作に失敗しました');
+        });
+    }
+
+    loadStatus();
+
+    document.getElementById('btn-start').addEventListener('click', function() { doAction('start'); });
+    document.getElementById('btn-stop').addEventListener('click', function() { doAction('stop'); });
+    document.getElementById('btn-restart').addEventListener('click', function() { doAction('restart'); });
+    document.getElementById('btn-refresh').addEventListener('click', loadStatus);
+
+    var isAdmin = {{ 'true' if current_user.is_admin else 'false' }};
+    var isInstalled = {{ 'true' if app.installed else 'false' }};
+
+    if (isAdmin) {
+        if (!isInstalled) {
+            document.getElementById('btn-install').addEventListener('click', function() {
+                if (!confirm('このアプリをインストールしますか？')) return;
+
+                this.disabled = true;
+                this.innerHTML = '<i class="bi bi-hourglass-split"></i> インストール中...';
+
+                fetch('/apps/api/' + appId + '/install', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        alert(data.message);
+                        if (data.success) {
+                            location.reload();
+                        } else {
+                            this.disabled = false;
+                            this.innerHTML = '<i class="bi bi-download"></i> インストール';
+                        }
+                    })
+                    .catch(function(error) {
+                        alert('インストールに失敗しました');
+                        this.disabled = false;
+                        this.innerHTML = '<i class="bi bi-download"></i> インストール';
+                    }.bind(this));
+            });
+        } else {
+            document.getElementById('btn-check-update').addEventListener('click', function() {
+                this.disabled = true;
+                this.innerHTML = '<i class="bi bi-hourglass-split"></i> 確認中...';
+
+                fetch('/apps/api/' + appId + '/check-update')
+                    .then(response => response.json())
+                    .then(data => {
+                        this.disabled = false;
+                        this.innerHTML = '<i class="bi bi-search"></i> アップデート確認';
+
+                        var statusEl = document.getElementById('update-status');
+                        if (data.error) {
+                            statusEl.textContent = 'エラー: ' + data.error;
+                        } else if (data.has_update) {
+                            statusEl.innerHTML = '<span class="badge badge-success">新バージョンあり: ' + data.latest_version + '</span>';
+                            document.getElementById('btn-update').disabled = false;
+                        } else {
+                            statusEl.textContent = '最新バージョンです';
+                        }
+                    })
+                    .catch(function(error) {
+                        this.disabled = false;
+                        this.innerHTML = '<i class="bi bi-search"></i> アップデート確認';
+                        alert('確認に失敗しました');
+                    }.bind(this));
+            });
+
+            document.getElementById('btn-update').addEventListener('click', function() {
+                if (!confirm('アプリをアップデートしますか？\nサービスは一時停止されます。')) return;
+
+                this.disabled = true;
+                this.innerHTML = '<i class="bi bi-hourglass-split"></i> アップデート中...';
+
+                fetch('/apps/api/' + appId + '/update', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        alert(data.message);
+                        if (data.success) {
+                            location.reload();
+                        } else {
+                            this.disabled = false;
+                            this.innerHTML = '<i class="bi bi-cloud-download"></i> アップデート';
+                        }
+                    })
+                    .catch(function(error) {
+                        alert('アップデートに失敗しました');
+                        this.disabled = false;
+                        this.innerHTML = '<i class="bi bi-cloud-download"></i> アップデート';
+                    }.bind(this));
+            });
+
+            document.getElementById('btn-uninstall').addEventListener('click', function() {
+                if (!confirm('このアプリをアンインストールしますか？\nこの操作は取り消せません。')) return;
+
+                this.disabled = true;
+                this.innerHTML = '<i class="bi bi-hourglass-split"></i> アンインストール中...';
+
+                fetch('/apps/api/' + appId + '/uninstall', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        alert(data.message);
+                        if (data.success) {
+                            location.reload();
+                        } else {
+                            this.disabled = false;
+                            this.innerHTML = '<i class="bi bi-trash"></i> アンインストール';
+                        }
+                    })
+                    .catch(function(error) {
+                        alert('アンインストールに失敗しました');
+                        this.disabled = false;
+                        this.innerHTML = '<i class="bi bi-trash"></i> アンインストール';
+                    }.bind(this));
+            });
+        }
+    }
+});
+</script>
+{% endblock %}
