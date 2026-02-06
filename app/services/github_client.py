@@ -49,15 +49,17 @@ class GitHubClientError(Exception):
 class GitHubClient:
     """GitHub API クライアント"""
 
-    API_BASE_URL = "https://api.github.com"
+    DEFAULT_API_BASE_URL = "https://api.github.com"
 
-    def __init__(self, token: str):
+    def __init__(self, token: str, api_base_url: str | None = None):
         """初期化
 
         Args:
             token: GitHub Personal Access Token
+            api_base_url: GitHub API のベースURL（GitHub Enterprise の場合に指定）
         """
         self.token = token
+        self.api_base_url = (api_base_url or self.DEFAULT_API_BASE_URL).rstrip("/")
 
     def _request(self, endpoint: str) -> dict:
         """GitHub API にリクエストを送信する。
@@ -71,7 +73,7 @@ class GitHubClient:
         Raises:
             GitHubClientError: APIリクエストに失敗した場合
         """
-        url = f"{self.API_BASE_URL}{endpoint}"
+        url = f"{self.api_base_url}{endpoint}"
         headers = {
             "Accept": "application/vnd.github+json",
             "Authorization": f"Bearer {self.token}",

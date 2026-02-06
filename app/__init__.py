@@ -1,5 +1,7 @@
 """POL統合ポータル・リソース管理システム"""
 
+__version__ = "1.0.0"
+
 import logging
 import secrets
 from pathlib import Path
@@ -166,6 +168,9 @@ def _save_system_config(db: Database, config: SystemConfig) -> None:
 
     # アプリインストール設定
     db.set_setting("app_install.install_dir", config.app_install.install_dir, "app_install")
+    db.set_setting(
+        "app_install.github_api_url", config.app_install.github_api_url, "app_install"
+    )
 
     # ログ設定
     db.set_setting("logging.level", config.logging.level, "logging")
@@ -230,6 +235,9 @@ def _apply_flask_config(
     app.config["APP_INSTALL_DIR"] = db.get_setting(
         "app_install.install_dir", "/opt/pol-apps"
     )
+    app.config["GITHUB_API_URL"] = db.get_setting(
+        "app_install.github_api_url", "https://api.github.com"
+    )
 
     # GitHub Token
     app.config["GITHUB_TOKEN"] = env_vars.get("POL_GITHUB_TOKEN")
@@ -260,13 +268,40 @@ def _setup_logging_from_db(db: Database) -> None:
 
 def _register_blueprints(app: Flask) -> None:
     """Blueprintを登録する。"""
-    from app.routes import apps, auth, dashboard, resources, settings
+    from app.routes import apps, auth, dashboard, proxy, resources, settings
 
     app.register_blueprint(auth.bp)
     app.register_blueprint(dashboard.bp)
     app.register_blueprint(resources.bp)
     app.register_blueprint(apps.bp)
     app.register_blueprint(settings.bp)
+    app.register_blueprint(proxy.bp)
+
+    # コンテキストプロセッサを登録（サイドバー用）
+    @app.context_processor
+    def inject_sidebar_data():
+        """テンプレートにサイドバー用データを注入する。"""
+        from flask_login import current_user
+
+        result = {
+            "installed_apps": [],
+            "app_version": __version__,
+        }
+
+        if not current_user.is_authenticated:
+            return result
+
+        database = app.extensions.get("database")
+        if database is None:
+            return result
+
+        applications = database.get_all_applications()
+        result["installed_apps"] = [
+            {"id": a.id, "name": a.name, "port": a.port}
+            for a in applications
+            if a.installed
+        ]
+        return result
 
 
 def get_db() -> Database:

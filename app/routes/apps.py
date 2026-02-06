@@ -37,7 +37,8 @@ def _get_installer() -> AppInstaller:
         raise GitHubClientError("GitHub Tokenが設定されていません")
 
     install_dir = Path(current_app.config.get("APP_INSTALL_DIR", "/opt/pol-apps"))
-    client = GitHubClient(token)
+    api_base_url = current_app.config.get("GITHUB_API_URL")
+    client = GitHubClient(token, api_base_url=api_base_url)
     return AppInstaller(client, install_dir)
 
 
@@ -68,13 +69,6 @@ def _get_app_manager() -> AppManager:
     use_systemctl = platform.system() == "Linux"
 
     return AppManager(apps=app_configs, use_systemctl=use_systemctl)
-
-
-@bp.route("/")
-@login_required
-def index():
-    """アプリ一覧を表示する。"""
-    return render_template("apps/index.html")
 
 
 @bp.route("/<app_id>")

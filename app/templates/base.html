@@ -1,64 +1,115 @@
 <!DOCTYPE html>
-<html lang="ja" data-theme="light">
+<html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}POL Portal{% endblock %}</title>
 
-    <!-- Pico.css -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
-    <!-- Custom CSS -->
+    <!-- Design System CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/common.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
     {% block head %}{% endblock %}
 </head>
 <body>
-    <!-- Header -->
-    <header class="container">
-        <nav>
-            <ul>
-                <li><strong>POL Portal</strong></li>
-            </ul>
-            <ul>
-                <li><a href="{{ url_for('dashboard.index') }}">ダッシュボード</a></li>
-                <li><a href="{{ url_for('resources.index') }}">リソース</a></li>
-                <li><a href="{{ url_for('apps.index') }}">アプリ管理</a></li>
-                {% if current_user.is_authenticated and current_user.is_admin %}
-                <li><a href="{{ url_for('settings.index') }}">設定</a></li>
-                {% endif %}
-            </ul>
-            <ul>
-                {% if current_user.is_authenticated %}
-                <li>{{ current_user.username }}</li>
-                <li><a href="{{ url_for('auth.logout') }}" role="button" class="outline">ログアウト</a></li>
-                {% else %}
-                <li><a href="{{ url_for('auth.login') }}" role="button">ログイン</a></li>
-                {% endif %}
-            </ul>
-        </nav>
+    {% block layout %}
+    <!-- Fixed Header -->
+    <header class="app-header">
+        <button class="header-toggle" onclick="toggleSidebar()" title="メニュー">
+            <i class="bi bi-list"></i>
+        </button>
+        <a href="{{ url_for('dashboard.index') }}" class="header-logo">
+            <i class="bi bi-app-indicator"></i>
+            <span>POL Lab Portal</span>
+        </a>
+        <div class="header-right">
+            {% if current_user.is_authenticated %}
+            <span class="header-user"><i class="bi bi-person-circle"></i> {{ current_user.username }}</span>
+            <a href="{{ url_for('auth.logout') }}"><i class="bi bi-box-arrow-right"></i> ログアウト</a>
+            {% else %}
+            <a href="{{ url_for('auth.login') }}"><i class="bi bi-box-arrow-in-right"></i> ログイン</a>
+            {% endif %}
+        </div>
     </header>
 
-    <!-- Main Content -->
-    <main class="container">
-        <!-- Flash Messages -->
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                <article class="flash-{{ category }}">
-                    {{ message }}
-                </article>
+    <div class="app-container">
+        <!-- Sidebar Overlay -->
+        <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+        <!-- Sidebar -->
+        <nav class="sidebar" id="sidebar">
+            <!-- 上部：メインメニュー -->
+            <div class="sidebar-nav">
+                <div class="nav-section-title">メニュー</div>
+                <a href="{{ url_for('dashboard.index') }}"
+                   class="nav-item {{ 'active' if request.endpoint == 'dashboard.index' or request.blueprint == 'apps' }}"
+                   title="ダッシュボード">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>ダッシュボード</span>
+                </a>
+                {% if current_user.is_authenticated and current_user.is_admin %}
+                <a href="{{ url_for('settings.index') }}"
+                   class="nav-item {{ 'active' if request.blueprint == 'settings' }}"
+                   title="設定">
+                    <i class="bi bi-gear"></i>
+                    <span>設定</span>
+                </a>
+                {% endif %}
+            </div>
+
+            <!-- 下部：アプリリンク＆バージョン情報 -->
+            <div class="sidebar-bottom">
+                {% if installed_apps %}
+                <div class="nav-section-title">アプリケーション</div>
+                {% for app in installed_apps %}
+                <a href="{{ url_for('proxy.proxy', app_id=app.id) }}"
+                   class="nav-item"
+                   title="{{ app.name }}を開く"
+                   target="_blank">
+                    <i class="bi bi-box-arrow-up-right"></i>
+                    <span>{{ app.name }}</span>
+                </a>
                 {% endfor %}
-            {% endif %}
-        {% endwith %}
+                {% endif %}
+                <div class="sidebar-version">
+                    <span>v{{ app_version }}</span>
+                </div>
+            </div>
+        </nav>
 
-        {% block content %}{% endblock %}
-    </main>
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Flash Messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                    <div class="flash-message flash-{{ category }}">
+                        {% if category == 'success' %}<i class="bi bi-check-circle"></i>
+                        {% elif category == 'error' %}<i class="bi bi-exclamation-circle"></i>
+                        {% elif category == 'warning' %}<i class="bi bi-exclamation-triangle"></i>
+                        {% else %}<i class="bi bi-info-circle"></i>
+                        {% endif %}
+                        {{ message }}
+                    </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
 
-    <!-- Footer -->
-    <footer class="container">
-        <small>POL統合ポータル &copy; 2025</small>
-    </footer>
+            {% block content %}{% endblock %}
+
+            <!-- Footer -->
+            <footer class="app-footer">
+                <small>POL統合ポータル &copy; 2025</small>
+            </footer>
+        </main>
+    </div>
+
+    <!-- Sidebar JS -->
+    <script src="{{ url_for('static', filename='js/sidebar.js') }}"></script>
+    {% endblock %}
 
     <!-- Custom JS -->
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>

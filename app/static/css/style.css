@@ -1,123 +1,194 @@
-/* POL Portal カスタムスタイル */
+/* POL Portal - Additional Styles
+   Supplements common.css with app-specific overrides */
 
-/* 状態バッジ */
-.status-running {
-    color: var(--pico-ins-color, #2e7d32);
-    font-weight: bold;
-}
-
-.status-stopped {
-    color: var(--pico-secondary, #546e7a);
-}
-
-.status-error {
-    color: var(--pico-del-color, #c62828);
-    font-weight: bold;
-}
-
-.status-unknown {
-    color: var(--pico-muted-color, #7b8794);
-}
-
-/* フラッシュメッセージ */
-.flash-success {
-    background-color: var(--pico-ins-color, #2e7d32);
-    color: white;
-    padding: 1rem;
-    border-radius: var(--pico-border-radius);
-    margin-bottom: 1rem;
-}
-
-.flash-error {
-    background-color: var(--pico-del-color, #c62828);
-    color: white;
-    padding: 1rem;
-    border-radius: var(--pico-border-radius);
-    margin-bottom: 1rem;
-}
-
-.flash-warning {
-    background-color: var(--pico-mark-background-color, #fff3cd);
-    padding: 1rem;
-    border-radius: var(--pico-border-radius);
-    margin-bottom: 1rem;
-}
-
-.flash-info {
-    background-color: var(--pico-primary-background, #e3f2fd);
-    padding: 1rem;
-    border-radius: var(--pico-border-radius);
-    margin-bottom: 1rem;
-}
-
-/* ヘッダー */
-header.container {
-    padding-top: 1rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid var(--pico-muted-border-color);
-    margin-bottom: 2rem;
-}
-
-/* フッター */
-footer.container {
-    margin-top: 2rem;
-    padding-top: 1rem;
-    border-top: 1px solid var(--pico-muted-border-color);
-    text-align: center;
-}
-
-/* プログレスバー警告色 */
+/* Progress bar warning threshold animation */
 progress[value]::-webkit-progress-value {
     transition: width 0.3s ease;
 }
 
-progress.warning::-webkit-progress-value {
-    background-color: var(--pico-del-color, #c62828);
-}
-
-/* ディスクアイテム */
-.disk-item {
-    margin-bottom: 1rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid var(--pico-muted-border-color);
-}
-
-.disk-item:last-child {
-    border-bottom: none;
-}
-
-/* ボタングリッド */
-.grid button {
+/* Button grid layout for action buttons within tables */
+.btn-group button {
     margin: 0;
 }
 
-/* パンくずリスト */
-nav[aria-label="breadcrumb"] ul {
+/* Icon buttons for app actions */
+.btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
     padding: 0;
-    margin-bottom: 1rem;
+    border: none;
+    background: transparent;
+    color: var(--primary-color);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 1rem;
 }
 
-nav[aria-label="breadcrumb"] li {
-    display: inline;
+.btn-icon:hover {
+    background: rgba(79, 70, 229, 0.1);
+    color: var(--primary-hover);
+    text-decoration: none;
 }
 
-nav[aria-label="breadcrumb"] li:not(:last-child)::after {
-    content: " / ";
-    color: var(--pico-muted-color);
+.btn-icon:active {
+    transform: scale(0.95);
 }
 
-/* 定義リスト */
-dl {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 0.5rem 1rem;
+/* Actions cell for table */
+.actions-cell {
+    white-space: nowrap;
+    display: flex;
+    gap: 0.25rem;
 }
 
-dt {
-    font-weight: bold;
-    color: var(--pico-muted-color);
+/* App name cell with detail button */
+.app-name-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
 }
 
-dd {
+/* Resource Stats Card */
+.resource-stats-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    overflow: hidden;
+}
+
+.resource-stats-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background: var(--bg-gradient);
+    color: white;
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.resource-stats-header i {
+    margin-right: 0.5rem;
+}
+
+.resource-stats-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-weight: 400;
+    font-size: 0.8rem;
+    opacity: 0.9;
+}
+
+.resource-stats-meta .btn-icon {
+    color: white;
+    width: 28px;
+    height: 28px;
+    font-size: 0.9rem;
+}
+
+.resource-stats-meta .btn-icon:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.resource-stats-body {
+    padding: 0.5rem;
+}
+
+.resource-stat-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+    margin-bottom: 0.25rem;
+}
+
+.resource-stat-row:last-child {
+    margin-bottom: 0;
+}
+
+.resource-stat-row.info {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.04) 100%);
+}
+
+.resource-stat-row.success {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.04) 100%);
+}
+
+.resource-stat-row.warning {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(245, 158, 11, 0.04) 100%);
+}
+
+.resource-stat-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 180px;
+}
+
+.resource-stat-info i {
+    font-size: 1rem;
+    color: var(--secondary-color);
+}
+
+.resource-stat-row.info .resource-stat-info i { color: var(--info-color); }
+.resource-stat-row.success .resource-stat-info i { color: var(--success-color); }
+.resource-stat-row.warning .resource-stat-info i { color: var(--warning-color); }
+
+.resource-stat-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #334155;
+    min-width: 50px;
+}
+
+.resource-stat-detail {
+    font-size: 0.8rem;
+    color: var(--secondary-color);
+}
+
+.resource-stat-bar {
+    flex: 1;
+    min-width: 100px;
+}
+
+.resource-stat-bar progress {
     margin: 0;
+    height: 6px;
+}
+
+.resource-stat-value {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #334155;
+    min-width: 50px;
+    text-align: right;
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+    .resource-stat-row {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .resource-stat-info {
+        min-width: auto;
+        flex: 1;
+    }
+
+    .resource-stat-bar {
+        order: 3;
+        flex-basis: 100%;
+    }
+
+    .resource-stat-value {
+        min-width: auto;
+    }
 }

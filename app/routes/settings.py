@@ -284,16 +284,22 @@ def app_install():
 
     if request.method == "POST":
         install_dir = request.form.get("install_dir", "").strip()
+        github_api_url = request.form.get("github_api_url", "").strip()
 
         if not install_dir:
             flash("インストール先ディレクトリを入力してください", "error")
             return redirect(url_for("settings.app_install"))
 
         db.set_setting("app_install.install_dir", install_dir, "app_install")
+        if github_api_url:
+            db.set_setting(
+                "app_install.github_api_url", github_api_url, "app_install"
+            )
         flash("アプリインストール設定を保存しました", "success")
         logger.info(
-            "アプリインストール設定を変更しました install_dir=%s user=%s",
+            "アプリインストール設定を変更しました install_dir=%s github_api_url=%s user=%s",
             install_dir,
+            github_api_url,
             current_user.username,
         )
 
@@ -301,6 +307,9 @@ def app_install():
 
     settings = {
         "install_dir": db.get_setting("app_install.install_dir", "/opt/pol-apps"),
+        "github_api_url": db.get_setting(
+            "app_install.github_api_url", "https://api.github.com"
+        ),
     }
     return render_template("settings/app_install.html", settings=settings)
 

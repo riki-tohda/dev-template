@@ -85,9 +85,14 @@ class Database:
                     installed_version TEXT,
                     installed_at DATETIME,
                     sort_order INTEGER DEFAULT 0,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    proxy_enabled INTEGER DEFAULT 1,
+                    proxy_rewrite_urls INTEGER DEFAULT 1
                 )
             """)
+
+            # 既存テーブルへのカラム追加（マイグレーション）
+            self._migrate_applications_table(cursor)
 
     def is_initialized(self) -> bool:
         """データベースが初期化済みかどうかを確認する。
@@ -315,9 +320,10 @@ class Database:
                 INSERT INTO applications (
                     id, name, description, github_owner, github_repo,
                     service_name, port, health_check_path, auto_restart,
-                    installed, installed_version, installed_at, sort_order
+                    installed, installed_version, installed_at, sort_order,
+                    proxy_enabled, proxy_rewrite_urls
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     app.id,
@@ -333,6 +339,8 @@ class Database:
                     app.installed_version,
                     app.installed_at,
                     app.sort_order,
+                    1 if app.proxy_enabled else 0,
+                    1 if app.proxy_rewrite_urls else 0,
                 ),
             )
 
@@ -381,7 +389,8 @@ class Database:
                 SET name = ?, description = ?, github_owner = ?, github_repo = ?,
                     service_name = ?, port = ?, health_check_path = ?,
                     auto_restart = ?, installed = ?, installed_version = ?,
-                    installed_at = ?, sort_order = ?, updated_at = CURRENT_TIMESTAMP
+                    installed_at = ?, sort_order = ?, proxy_enabled = ?,
+                    proxy_rewrite_urls = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
                 (
@@ -397,12 +406,18 @@ class Database:
                     app.installed_version,
                     app.installed_at,
                     app.sort_order,
+                    1 if app.proxy_enabled else 0,
+                    1 if app.proxy_rewrite_urls else 0,
                     app.id,
                 ),
             )
 
     def _row_to_application(self, row: sqlite3.Row) -> Application:
         """SQLite行をApplicationオブジェクトに変換する。"""
+        # 新しいカラムはマイグレーション前は存在しない可能性があるため、
+        # キーの存在確認を行う
+        row_keys = row.keys()
+
         return Application(
             id=row["id"],
             name=row["name"],
@@ -418,6 +433,8 @@ class Database:
             installed_at=self._parse_datetime(row["installed_at"]),
             sort_order=row["sort_order"],
             updated_at=self._parse_datetime(row["updated_at"]),
+            proxy_enabled=bool(row["proxy_enabled"]) if "proxy_enabled" in row_keys else True,
+            proxy_rewrite_urls=bool(row["proxy_rewrite_urls"]) if "proxy_rewrite_urls" in row_keys else True,
         )
 
     def _parse_datetime(self, value: str | None) -> datetime | None:
@@ -428,3 +445,21 @@ class Database:
             return datetime.fromisoformat(value.replace(" ", "T"))
         except (ValueError, AttributeError):
             return None
+
+    def _migrate_applications_table(self, cursor: sqlite3.Cursor) -> None:
+        """applicationsテーブルのマイグレーションを行う。"""
+        # 既存カラムを取得
+        cursor.execute("PRAGMA table_info(applications)")
+        columns = {row[1] for row in cursor.fetchall()}
+
+        # proxy_enabled カラムがなければ追加
+        if "proxy_enabled" not in columns:
+            cursor.execute(
+                "ALTER TABLE applications ADD COLUMN proxy_enabled INTEGER DEFAULT 1"
+            )
+
+        # proxy_rewrite_urls カラムがなければ追加
+        if "proxy_rewrite_urls" not in columns:
+            cursor.execute(
+                "ALTER TABLE applications ADD COLUMN proxy_rewrite_urls INTEGER DEFAULT 1"
+            )

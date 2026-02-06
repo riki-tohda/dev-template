@@ -3,31 +3,33 @@
 {% block title %}サーバー設定 - POL Portal{% endblock %}
 
 {% block content %}
-<nav aria-label="breadcrumb">
-    <ul>
-        <li><a href="{{ url_for('settings.index') }}">設定</a></li>
-        <li>サーバー設定</li>
-    </ul>
-</nav>
+<ul class="breadcrumb">
+    <li><a href="{{ url_for('settings.index') }}">設定</a></li>
+    <li>サーバー設定</li>
+</ul>
 
-<h1>サーバー設定</h1>
+<div class="page-header">
+    <h1><i class="bi bi-hdd-network"></i> サーバー設定</h1>
+</div>
 
-<article>
-    <form method="post">
-        <label for="host">
-            バインドアドレス
+<div class="setting-section">
+    <div class="setting-section-header">
+        <i class="bi bi-hdd-network"></i>
+        <span>サーバー設定</span>
+    </div>
+    <div class="setting-section-body">
+        <form method="post">
+            <label for="host">バインドアドレス</label>
             <input type="text" id="host" value="{{ settings.host }}" disabled>
-            <small>セキュリティ上、変更できません</small>
-        </label>
+            <small class="form-hint">セキュリティ上、変更できません</small>
 
-        <label for="port">
-            ポート番号
+            <label for="port">ポート番号</label>
             <input type="number" id="port" name="port" value="{{ settings.port }}"
                    min="1024" max="65535" required>
-            <small>1024-65535の範囲で指定。変更後は再起動が必要です。</small>
-        </label>
+            <small class="form-hint">1024-65535の範囲で指定。変更後は再起動が必要です。</small>
 
-        <button type="submit">保存</button>
-    </form>
-</article>
+            <button type="submit"><i class="bi bi-save"></i> 保存</button>
+        </form>
+    </div>
+</div>
 {% endblock %}

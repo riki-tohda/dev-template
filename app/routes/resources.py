@@ -1,18 +1,11 @@
 """リソースモニタのルート"""
 
-from flask import Blueprint, current_app, jsonify, render_template
+from flask import Blueprint, current_app, jsonify
 from flask_login import login_required
 
 from app.services.resource_monitor import create_monitor_from_config
 
 bp = Blueprint("resources", __name__, url_prefix="/resources")
-
-
-@bp.route("/")
-@login_required
-def index():
-    """リソースモニタ画面を表示する。"""
-    return render_template("resources.html")
 
 
 @bp.route("/api/status")

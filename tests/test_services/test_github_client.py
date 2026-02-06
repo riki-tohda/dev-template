@@ -63,6 +63,21 @@ def _make_urlopen_response(data: dict | list) -> MagicMock:
 class TestGitHubClient:
     """GitHubClient のテスト"""
 
+    def test_default_api_base_url(self):
+        """デフォルトの API Base URL が設定される"""
+        client = GitHubClient("test-token")
+        assert client.api_base_url == "https://api.github.com"
+
+    def test_custom_api_base_url(self):
+        """カスタム API Base URL が設定される"""
+        client = GitHubClient("test-token", api_base_url="https://github.example.com/api/v3")
+        assert client.api_base_url == "https://github.example.com/api/v3"
+
+    def test_custom_api_base_url_trailing_slash(self):
+        """末尾スラッシュが除去される"""
+        client = GitHubClient("test-token", api_base_url="https://github.example.com/api/v3/")
+        assert client.api_base_url == "https://github.example.com/api/v3"
+
     def test_request_success(self):
         """API リクエストが成功する"""
         client = GitHubClient("test-token")

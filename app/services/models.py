@@ -42,6 +42,7 @@ class AppInstallConfig:
     """アプリインストール設定"""
 
     install_dir: str = ""
+    github_api_url: str = "https://api.github.com"
 
 
 @dataclass
@@ -143,6 +144,9 @@ class Application:
     installed_at: datetime | None = None
     sort_order: int = 0
     updated_at: datetime | None = None
+    # プロキシ設定
+    proxy_enabled: bool = True
+    proxy_rewrite_urls: bool = True
 
 
 @dataclass

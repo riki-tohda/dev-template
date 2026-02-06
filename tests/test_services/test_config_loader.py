@@ -246,11 +246,37 @@ class TestConfigLoader:
         assert config.resource_monitor.disk_paths == ["/", "/home"]
         assert config.resource_monitor.warning_thresholds.cpu_percent == 70
         assert config.app_install.install_dir == "/var/apps"
+        assert config.app_install.github_api_url == "https://api.github.com"
         assert config.logging.level == "DEBUG"
         assert config.logging.directory == "logs/test"
         assert config.logging.console.enabled is False
         assert config.logging.archive.retention_days == 60
         assert config.logging.max_folder_size_mb == 200
+
+    def test_load_config_yaml_with_github_enterprise_url(self, tmp_path: Path) -> None:
+        """GitHub Enterprise API URL を含む config.yaml 読み込み"""
+        config_yaml = {
+            "server": {"host": "0.0.0.0", "port": 8000},
+            "auth": {
+                "initial_users": [
+                    {"username": "admin", "password": "admin", "role": "admin"}
+                ]
+            },
+            "app_install": {
+                "github_api_url": "https://github.example.co.jp/api/v3",
+                "install_dir": "/opt/apps",
+            },
+        }
+
+        config_path = tmp_path / "config.yaml"
+        with open(config_path, "w", encoding="utf-8") as f:
+            yaml.dump(config_yaml, f)
+
+        loader = ConfigLoader(tmp_path)
+        config = loader.load_config_yaml()
+
+        assert config.app_install.github_api_url == "https://github.example.co.jp/api/v3"
+        assert config.app_install.install_dir == "/opt/apps"
 
     def test_load_config_yaml_with_os_specific_values(self, tmp_path: Path) -> None:
         """OS別設定値を含むconfig.yaml読み込み"""
@@ -445,13 +471,13 @@ class TestConfigLoader:
     def test_load_environment_missing_token(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """環境変数POL_GITHUB_TOKEN未設定"""
+        """環境変数POL_GITHUB_TOKEN未設定時は警告を出しNoneを返す"""
         monkeypatch.delenv("POL_GITHUB_TOKEN", raising=False)
 
         loader = ConfigLoader(tmp_path)
+        env_vars = loader.load_environment()
 
-        with pytest.raises(ConfigValidationError, match="POL_GITHUB_TOKEN"):
-            loader.load_environment()
+        assert env_vars["POL_GITHUB_TOKEN"] is None
 
     def test_load_environment_valid(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

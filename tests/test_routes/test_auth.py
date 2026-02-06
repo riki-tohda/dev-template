@@ -85,14 +85,14 @@ class TestLoginRequired:
         assert response.status_code == 302
         assert "/login" in response.location
 
-    def test_resources_requires_login(self, client):
-        """リソースページは認証が必要"""
-        response = client.get("/resources/", follow_redirects=False)
+    def test_resources_api_requires_login(self, client):
+        """リソースAPIは認証が必要"""
+        response = client.get("/resources/api/status", follow_redirects=False)
         assert response.status_code == 302
         assert "/login" in response.location
 
-    def test_apps_requires_login(self, client):
-        """アプリ管理ページは認証が必要"""
-        response = client.get("/apps/", follow_redirects=False)
+    def test_apps_detail_requires_login(self, client):
+        """アプリ詳細ページは認証が必要"""
+        response = client.get("/apps/test-app", follow_redirects=False)
         assert response.status_code == 302
         assert "/login" in response.location

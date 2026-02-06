@@ -4,19 +4,14 @@ import json
 from unittest.mock import MagicMock, patch
 
 
-class TestAppsPage:
-    """アプリ一覧画面のテスト"""
+class TestAppsDetailPage:
+    """アプリ詳細画面のテスト"""
 
-    def test_requires_login(self, client):
+    def test_detail_requires_login(self, client):
         """未ログイン状態でリダイレクトされる"""
-        response = client.get("/apps/", follow_redirects=False)
+        response = client.get("/apps/test-app", follow_redirects=False)
         assert response.status_code == 302
         assert "/login" in response.location
-
-    def test_index_display(self, admin_client):
-        """アプリ一覧が表示される"""
-        response = admin_client.get("/apps/")
-        assert response.status_code == 200
 
     def test_detail_display(self, admin_client):
         """アプリ詳細が表示される"""

@@ -18,10 +18,10 @@ auth:
   # パスワードは平文で記載し、初回起動時にbcryptハッシュ化
   initial_users:
     - username: "admin"
-      password: "admin"
+      password: "polalis"
       role: "admin"         # admin または user
     - username: "user"
-      password: "user"
+      password: "polalis"
       role: "user"
 
 # ----- リソースモニタ設定 -----
@@ -39,6 +39,8 @@ resource_monitor:
 
 # ----- アプリインストール設定 -----
 app_install:
+  # GitHub API URL（GitHub Enterprise の場合は https://<HOSTNAME>/api/v3）
+  github_api_url: "https://api.github.com"
   # ローカルインストール先ディレクトリ（OS別設定）
   install_dir:
     windows: "C:\\pol-apps"

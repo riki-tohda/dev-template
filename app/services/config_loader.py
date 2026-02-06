@@ -233,8 +233,9 @@ class ConfigLoader:
         """
         github_token = os.environ.get("POL_GITHUB_TOKEN")
         if not github_token:
-            raise ConfigValidationError(
-                "環境変数 POL_GITHUB_TOKEN が設定されていません"
+            logger.warning(
+                "環境変数 POL_GITHUB_TOKEN が設定されていません。"
+                "GitHub連携機能は無効になります。"
             )
 
         return {
@@ -314,8 +315,13 @@ class ConfigLoader:
         else:
             install_dir = self._get_default("app_install.install_dir")
 
+        github_api_url = app_install_data.get(
+            "github_api_url", "https://api.github.com"
+        )
+
         app_install = AppInstallConfig(
             install_dir=install_dir,
+            github_api_url=github_api_url,
         )
 
         # ログ設定
