@@ -7,7 +7,7 @@ import bcrypt
 import pytest
 
 from app.services.database import Database
-from app.services.models import Application, InitialUser, User
+from app.services.models import Application, InitialUser
 
 
 class TestDatabaseInitialization:

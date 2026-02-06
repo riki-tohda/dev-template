@@ -13,7 +13,6 @@
 """
 
 import logging
-import os
 import shutil
 import tarfile
 from dataclasses import dataclass

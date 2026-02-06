@@ -1,11 +1,10 @@
 """リバースプロキシのルート"""
 
 import re
-from urllib.parse import urljoin
-
-import urllib.request
 import urllib.error
-from flask import Blueprint, Response, abort, current_app, request, stream_with_context
+import urllib.request
+
+from flask import Blueprint, Response, abort, current_app, request
 from flask_login import current_user, login_required
 
 from app import get_db

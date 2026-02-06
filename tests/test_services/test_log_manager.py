@@ -1,7 +1,6 @@
 """log_manager のテスト"""
 
 import logging
-import tarfile
 from datetime import datetime, timedelta
 from pathlib import Path
 

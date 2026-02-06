@@ -1,7 +1,5 @@
 """認証ルートのテスト"""
 
-import pytest
-
 
 class TestLogin:
     """ログインのテスト"""

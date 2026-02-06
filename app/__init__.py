@@ -9,7 +9,7 @@ from pathlib import Path
 from flask import Flask
 from flask_login import LoginManager
 
-from app.services.config_loader import ConfigLoader, ConfigValidationError
+from app.services.config_loader import ConfigLoader
 from app.services.database import Database
 from app.services.log_manager import setup_logging
 from app.services.models import SystemConfig

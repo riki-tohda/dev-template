@@ -1,7 +1,5 @@
 """プロキシルートのテスト"""
 
-from unittest.mock import MagicMock, patch
-
 
 class TestProxyRoute:
     """プロキシルートのテスト"""
