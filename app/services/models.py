@@ -127,6 +127,38 @@ class User:
 
 
 @dataclass
+class AppScript:
+    """アプリケーションスクリプト"""
+
+    id: str
+    app_id: str
+    name: str
+    script_path: str
+    mode: str = "sync"  # "sync" | "async"
+    description: str | None = None
+    timeout: int = 60
+    sort_order: int = 0
+    enabled: bool = True
+
+
+@dataclass
+class ScriptExecution:
+    """スクリプト実行履歴"""
+
+    id: int | None
+    script_id: str
+    app_id: str
+    executed_by: str
+    mode: str
+    status: str = "running"  # running | completed | failed | timeout
+    exit_code: int | None = None
+    stdout: str | None = None
+    stderr: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+
+
+@dataclass
 class Application:
     """アプリケーション"""
 

@@ -57,9 +57,25 @@ def config_dir(tmp_path: Path) -> Path:
                 "port": 8001,
                 "health_check_path": "/health",
                 "auto_restart": True,
+                "scripts": [
+                    {
+                        "id": "test-script",
+                        "name": "Test Script",
+                        "description": "A test script",
+                        "path": str(tmp_path / "scripts" / "test.bat"),
+                        "mode": "sync",
+                        "timeout": 30,
+                    }
+                ],
             }
         ]
     }
+
+    # テスト用スクリプトディレクトリとファイルを作成
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir(exist_ok=True)
+    test_script = scripts_dir / "test.bat"
+    test_script.write_text("@echo hello\n", encoding="utf-8")
 
     config_path = tmp_path / "config.yaml"
     with open(config_path, "w", encoding="utf-8") as f:
