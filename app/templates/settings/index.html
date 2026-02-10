@@ -59,6 +59,16 @@
     </div>
 
     <div class="settings-card">
+        <h3><i class="bi bi-journal-text"></i> ログ設定</h3>
+        <p>ログ保持期間・アーカイブの設定</p>
+        <div class="card-action">
+            <a href="{{ url_for('settings.logging_settings') }}" class="btn-outline" style="padding: 0.4rem 1rem;">
+                <i class="bi bi-pencil-square"></i> 設定
+            </a>
+        </div>
+    </div>
+
+    <div class="settings-card">
         <h3><i class="bi bi-key"></i> パスワード変更</h3>
         <p>自分のパスワードを変更</p>
         <div class="card-action">

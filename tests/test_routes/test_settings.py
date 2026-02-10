@@ -220,6 +220,129 @@ class TestAppInstallSettings:
         assert "入力してください" in response.data.decode("utf-8")
 
 
+class TestLoggingSettings:
+    """ログ設定のテスト"""
+
+    def test_page_display(self, admin_client):
+        """ログ設定画面が表示される"""
+        response = admin_client.get("/settings/logging")
+        assert response.status_code == 200
+        assert "ログ設定" in response.data.decode("utf-8")
+
+    def test_save_valid_settings(self, admin_client):
+        """有効なログ設定を保存できる"""
+        response = admin_client.post(
+            "/settings/logging",
+            data={
+                "retention_days": "14",
+                "archive_retention_days": "60",
+                "max_folder_size_mb": "200",
+                "backup_count": "5",
+            },
+            follow_redirects=True,
+        )
+        assert response.status_code == 200
+        assert "保存しました" in response.data.decode("utf-8")
+
+    def test_invalid_retention_days(self, admin_client):
+        """無効なログ保持期間でエラー"""
+        response = admin_client.post(
+            "/settings/logging",
+            data={
+                "retention_days": "0",
+                "archive_retention_days": "30",
+                "max_folder_size_mb": "500",
+                "backup_count": "3",
+            },
+            follow_redirects=True,
+        )
+        assert response.status_code == 200
+        assert "1-365" in response.data.decode("utf-8")
+
+    def test_invalid_archive_retention(self, admin_client):
+        """無効なアーカイブ保持期間でエラー"""
+        response = admin_client.post(
+            "/settings/logging",
+            data={
+                "retention_days": "7",
+                "archive_retention_days": "400",
+                "max_folder_size_mb": "500",
+                "backup_count": "3",
+            },
+            follow_redirects=True,
+        )
+        assert response.status_code == 200
+        assert "1-365" in response.data.decode("utf-8")
+
+    def test_invalid_max_size(self, admin_client):
+        """無効な最大フォルダサイズでエラー"""
+        response = admin_client.post(
+            "/settings/logging",
+            data={
+                "retention_days": "7",
+                "archive_retention_days": "30",
+                "max_folder_size_mb": "5",
+                "backup_count": "3",
+            },
+            follow_redirects=True,
+        )
+        assert response.status_code == 200
+        assert "10-10000" in response.data.decode("utf-8")
+
+    def test_invalid_backup_count(self, admin_client):
+        """無効なバックアップ数でエラー"""
+        response = admin_client.post(
+            "/settings/logging",
+            data={
+                "retention_days": "7",
+                "archive_retention_days": "30",
+                "max_folder_size_mb": "500",
+                "backup_count": "0",
+            },
+            follow_redirects=True,
+        )
+        assert response.status_code == 200
+        assert "1-10" in response.data.decode("utf-8")
+
+    def test_user_cannot_access(self, user_client):
+        """一般ユーザーはアクセスできない"""
+        response = user_client.get("/settings/logging", follow_redirects=False)
+        assert response.status_code == 302
+
+
+class TestLoggingApi:
+    """ログAPIのテスト"""
+
+    def test_stats_api(self, admin_client):
+        """統計APIが正常に応答する"""
+        response = admin_client.get("/settings/logging/api/stats")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "total_size_mb" in data
+
+    def test_maintenance_api(self, admin_client):
+        """メンテナンスAPIが正常に応答する"""
+        response = admin_client.post("/settings/logging/api/maintenance")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "archived" in data
+        assert "deleted_logs" in data
+
+    def test_stats_api_requires_admin(self, user_client):
+        """統計APIは管理者権限が必要"""
+        response = user_client.get(
+            "/settings/logging/api/stats", follow_redirects=False
+        )
+        assert response.status_code == 302
+
+    def test_maintenance_api_requires_admin(self, user_client):
+        """メンテナンスAPIは管理者権限が必要"""
+        response = user_client.post(
+            "/settings/logging/api/maintenance", follow_redirects=False
+        )
+        assert response.status_code == 302
+
+
 class TestPasswordChange:
     """パスワード変更のテスト"""
 
