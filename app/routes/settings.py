@@ -3,7 +3,16 @@
 from functools import wraps
 
 import bcrypt
-from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+from flask import (
+    Blueprint,
+    abort,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 from flask_login import current_user, login_required
 
 from app import get_db
@@ -320,6 +329,106 @@ def app_install():
         ),
     }
     return render_template("settings/app_install.html", settings=settings)
+
+
+# --- ログ設定 ---
+
+
+@bp.route("/logging", methods=["GET", "POST"])
+@admin_required
+def logging_settings():
+    """ログ設定画面"""
+    db = get_db()
+
+    if request.method == "POST":
+        try:
+            retention_days = int(request.form.get("retention_days", 7))
+            archive_retention_days = int(
+                request.form.get("archive_retention_days", 30)
+            )
+            max_folder_size_mb = int(request.form.get("max_folder_size_mb", 500))
+            backup_count = int(request.form.get("backup_count", 3))
+
+            if retention_days < 1 or retention_days > 365:
+                raise ValueError("ログ保持期間は1-365日の範囲で指定してください")
+            if archive_retention_days < 1 or archive_retention_days > 365:
+                raise ValueError(
+                    "アーカイブ保持期間は1-365日の範囲で指定してください"
+                )
+            if max_folder_size_mb < 10 or max_folder_size_mb > 10000:
+                raise ValueError(
+                    "最大フォルダサイズは10-10000MBの範囲で指定してください"
+                )
+            if backup_count < 1 or backup_count > 10:
+                raise ValueError("バックアップ数は1-10の範囲で指定してください")
+
+            db.set_setting("logging.retention_days", retention_days, "logging")
+            db.set_setting(
+                "logging.archive.retention_days",
+                archive_retention_days,
+                "logging",
+            )
+            db.set_setting(
+                "logging.max_folder_size_mb", max_folder_size_mb, "logging"
+            )
+            db.set_setting("logging.backup_count", backup_count, "logging")
+
+            flash(
+                "ログ設定を保存しました（再起動後に反映されます）", "success"
+            )
+            logger.info(
+                "ログ設定を変更しました retention=%dd archive_retention=%dd "
+                "max_size=%dMB backup=%d user=%s",
+                retention_days,
+                archive_retention_days,
+                max_folder_size_mb,
+                backup_count,
+                current_user.username,
+            )
+        except ValueError as e:
+            flash(str(e), "error")
+
+        return redirect(url_for("settings.logging_settings"))
+
+    settings = {
+        "retention_days": db.get_setting("logging.retention_days", 7),
+        "archive_retention_days": db.get_setting(
+            "logging.archive.retention_days", 30
+        ),
+        "max_folder_size_mb": db.get_setting("logging.max_folder_size_mb", 500),
+        "backup_count": db.get_setting("logging.backup_count", 3),
+    }
+    return render_template("settings/logging.html", settings=settings)
+
+
+@bp.route("/logging/api/stats")
+@admin_required
+def logging_stats():
+    """ログ統計情報APIエンドポイント"""
+    from app.services.log_manager import get_log_manager
+
+    lm = get_log_manager()
+    if lm is None:
+        return jsonify({"error": "LogManager未初期化"}), 500
+    return jsonify(lm.get_statistics())
+
+
+@bp.route("/logging/api/maintenance", methods=["POST"])
+@admin_required
+def logging_maintenance():
+    """ログメンテナンス実行APIエンドポイント"""
+    from app.services.log_manager import get_log_manager
+
+    lm = get_log_manager()
+    if lm is None:
+        return jsonify({"error": "LogManager未初期化"}), 500
+    result = lm.run_maintenance()
+    logger.info(
+        "ログメンテナンスを実行しました result=%s user=%s",
+        result,
+        current_user.username,
+    )
+    return jsonify(result)
 
 
 # --- プロファイル（全ユーザー共通） ---

@@ -267,14 +267,14 @@ def _setup_logging_from_db(db: Database) -> None:
         "directory": db.get_setting("logging.directory", "logs"),
         "console": {"enabled": db.get_setting("logging.console.enabled", True)},
         "max_size_mb": db.get_setting("logging.max_size_mb", 10),
-        "backup_count": db.get_setting("logging.backup_count", 5),
-        "retention_days": db.get_setting("logging.retention_days", 30),
+        "backup_count": db.get_setting("logging.backup_count", 3),
+        "retention_days": db.get_setting("logging.retention_days", 7),
         "archive": {
             "enabled": db.get_setting("logging.archive.enabled", True),
-            "directory": db.get_setting("logging.archive.directory", "logs/archive"),
-            "retention_days": db.get_setting("logging.archive.retention_days", 90),
+            "directory": db.get_setting("logging.archive.directory", "archive"),
+            "retention_days": db.get_setting("logging.archive.retention_days", 30),
         },
-        "max_folder_size_mb": db.get_setting("logging.max_folder_size_mb", 100),
+        "max_folder_size_mb": db.get_setting("logging.max_folder_size_mb", 500),
     }
     setup_logging(log_config)
 
