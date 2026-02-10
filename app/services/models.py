@@ -73,6 +73,7 @@ class LoggingConfig:
     retention_days: int = 7
     archive: LoggingArchiveConfig = field(default_factory=LoggingArchiveConfig)
     max_folder_size_mb: int = 500
+    maintenance_interval_hours: int = 24
 
 
 @dataclass

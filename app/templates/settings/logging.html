@@ -31,17 +31,29 @@
                    min="1" max="365" required>
             <small>この期間を過ぎたアーカイブは削除されます（1-365日）</small>
 
+            <label for="max_size_mb">1ファイル最大サイズ（MB）</label>
+            <input type="number" id="max_size_mb" name="max_size_mb"
+                   value="{{ settings.max_size_mb }}"
+                   min="1" max="100" required>
+            <small>ログファイル1つあたりの最大サイズ（1-100MB）</small>
+
             <label for="max_folder_size_mb">最大フォルダサイズ（MB）</label>
             <input type="number" id="max_folder_size_mb" name="max_folder_size_mb"
                    value="{{ settings.max_folder_size_mb }}"
                    min="10" max="10000" required>
-            <small>ログフォルダの最大サイズ（10-10000MB）</small>
+            <small>ログフォルダ全体の最大サイズ（10-10000MB）</small>
 
             <label for="backup_count">バックアップ数</label>
             <input type="number" id="backup_count" name="backup_count"
                    value="{{ settings.backup_count }}"
                    min="1" max="10" required>
             <small>ログファイルのローテーション保持数（1-10）</small>
+
+            <label for="maintenance_interval_hours">自動メンテナンス間隔（時間）</label>
+            <input type="number" id="maintenance_interval_hours" name="maintenance_interval_hours"
+                   value="{{ settings.maintenance_interval_hours }}"
+                   min="0" max="168" required>
+            <small>自動クリーンアップの実行間隔（0で無効、1-168時間）</small>
 
             <button type="submit"><i class="bi bi-save"></i> 保存</button>
         </form>
@@ -72,6 +84,14 @@
                     <th>アーカイブ数</th>
                     <td id="stat-archive-count">読み込み中...</td>
                 </tr>
+                <tr>
+                    <th>自動メンテナンス</th>
+                    <td id="stat-scheduler">読み込み中...</td>
+                </tr>
+                <tr>
+                    <th>次回実行予定</th>
+                    <td id="stat-next-run">読み込み中...</td>
+                </tr>
             </tbody>
         </table>
         <button type="button" id="btn-maintenance" class="btn-outline" style="margin-top: 1rem;">
@@ -89,6 +109,13 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('stat-usage-percent').textContent = data.usage_percent + '% (' + data.max_size_mb + ' MB中)';
             document.getElementById('stat-daily-dirs').textContent = data.daily_directories;
             document.getElementById('stat-archive-count').textContent = data.archive_count;
+            if (data.scheduler_active) {
+                document.getElementById('stat-scheduler').textContent = '有効（' + data.scheduler_interval_hours + '時間間隔）';
+                document.getElementById('stat-next-run').textContent = data.next_maintenance || '-';
+            } else {
+                document.getElementById('stat-scheduler').textContent = '無効';
+                document.getElementById('stat-next-run').textContent = '-';
+            }
         })
         .catch(() => {
             document.getElementById('stat-total-size').textContent = '取得エラー';

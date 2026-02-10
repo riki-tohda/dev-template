@@ -76,3 +76,6 @@ logging:
 
   # フォルダサイズ上限
   max_folder_size_mb: 500   # 超過時は古いファイルから削除
+
+  # 自動メンテナンス間隔（時間）
+  maintenance_interval_hours: 24  # 0で無効化

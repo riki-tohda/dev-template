@@ -349,6 +349,9 @@ class ConfigLoader:
             retention_days=logging_data.get("retention_days", 7),
             archive=archive_config,
             max_folder_size_mb=logging_data.get("max_folder_size_mb", 500),
+            maintenance_interval_hours=logging_data.get(
+                "maintenance_interval_hours", 24
+            ),
         )
 
         # 初期ユーザー
