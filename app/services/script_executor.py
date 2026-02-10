@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from app.services.log_manager import get_logger
-from app.services.models import AppScript, ScriptExecution
+from app.services.models import AppScript
 
 logger = get_logger("app")
 

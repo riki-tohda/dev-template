@@ -5,8 +5,6 @@ import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
-
 from app.services.models import AppScript, ScriptExecution
 from app.services.script_executor import ScriptExecutor
 

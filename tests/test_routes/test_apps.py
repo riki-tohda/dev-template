@@ -1,8 +1,6 @@
 """アプリケーション管理ルートのテスト"""
 
 import json
-import platform
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 
