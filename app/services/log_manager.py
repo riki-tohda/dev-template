@@ -15,6 +15,7 @@
 import logging
 import shutil
 import tarfile
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
@@ -39,6 +40,7 @@ DEFAULT_CONFIG = {
         "retention_days": 30,
     },
     "max_folder_size_mb": 500,
+    "maintenance_interval_hours": 24,
 }
 
 # フォーマット
@@ -60,6 +62,7 @@ class LogConfig:
     archive_directory: str
     archive_retention_days: int
     max_folder_size_bytes: int
+    maintenance_interval_hours: int
 
     @classmethod
     def from_dict(cls, config: dict, base_path: Path) -> "LogConfig":
@@ -95,6 +98,7 @@ class LogConfig:
             archive_directory=merged["archive"]["directory"],
             archive_retention_days=merged["archive"]["retention_days"],
             max_folder_size_bytes=merged["max_folder_size_mb"] * 1024 * 1024,
+            maintenance_interval_hours=merged["maintenance_interval_hours"],
         )
 
 
@@ -375,9 +379,84 @@ class LogManager:
         return total_size
 
 
+class MaintenanceScheduler:
+    """ログメンテナンスの定期実行スケジューラ
+
+    threading.Timer を使って一定間隔で run_maintenance() を実行する。
+    デーモンスレッドで動作するため、アプリ終了時に自動停止する。
+    """
+
+    def __init__(self, log_manager: LogManager, interval_hours: int):
+        """初期化
+
+        Args:
+            log_manager: LogManager インスタンス
+            interval_hours: 実行間隔（時間）。0の場合は無効。
+        """
+        self._log_manager = log_manager
+        self._interval_seconds = interval_hours * 3600
+        self._timer: threading.Timer | None = None
+        self._running = False
+        self._next_run: datetime | None = None
+        self._logger = logging.getLogger("app")
+
+    @property
+    def is_running(self) -> bool:
+        """スケジューラが実行中かどうか"""
+        return self._running
+
+    @property
+    def next_run(self) -> datetime | None:
+        """次回実行予定時刻"""
+        return self._next_run
+
+    @property
+    def interval_hours(self) -> int:
+        """実行間隔（時間）"""
+        return self._interval_seconds // 3600
+
+    def start(self) -> None:
+        """スケジューラを開始する。"""
+        if self._interval_seconds <= 0:
+            return
+        self._running = True
+        self._schedule_next()
+        self._logger.info(
+            "ログメンテナンススケジューラを開始しました interval=%dh",
+            self.interval_hours,
+        )
+
+    def stop(self) -> None:
+        """スケジューラを停止する。"""
+        self._running = False
+        if self._timer is not None:
+            self._timer.cancel()
+            self._timer = None
+        self._next_run = None
+
+    def _schedule_next(self) -> None:
+        """次回実行をスケジュールする。"""
+        if not self._running:
+            return
+        self._next_run = datetime.now() + timedelta(seconds=self._interval_seconds)
+        self._timer = threading.Timer(self._interval_seconds, self._run)
+        self._timer.daemon = True
+        self._timer.start()
+
+    def _run(self) -> None:
+        """メンテナンスを実行し、次回をスケジュールする。"""
+        try:
+            result = self._log_manager.run_maintenance()
+            self._logger.info("定期メンテナンスを実行しました result=%s", result)
+        except Exception:
+            self._logger.exception("定期メンテナンスでエラーが発生しました")
+        self._schedule_next()
+
+
 # モジュールレベルの状態
 _config: LogConfig | None = None
 _log_manager: LogManager | None = None
+_scheduler: MaintenanceScheduler | None = None
 _handlers: dict[LogType, DailyDirectoryHandler] = {}
 _initialized: bool = False
 
@@ -395,7 +474,7 @@ def setup_logging(
     Returns:
         LogManager インスタンス
     """
-    global _config, _log_manager, _handlers, _initialized
+    global _config, _log_manager, _scheduler, _handlers, _initialized
 
     if base_path is None:
         base_path = Path.cwd()
@@ -441,6 +520,13 @@ def setup_logging(
     # 起動時のメンテナンス実行
     _log_manager.run_maintenance()
 
+    # 定期メンテナンススケジューラの開始
+    if _config.maintenance_interval_hours > 0:
+        _scheduler = MaintenanceScheduler(
+            _log_manager, _config.maintenance_interval_hours
+        )
+        _scheduler.start()
+
     return _log_manager
 
 
@@ -475,9 +561,22 @@ def get_log_manager() -> LogManager | None:
     return _log_manager
 
 
+def get_scheduler() -> MaintenanceScheduler | None:
+    """MaintenanceScheduler インスタンスを取得する。
+
+    Returns:
+        MaintenanceScheduler インスタンス。未初期化の場合は None。
+    """
+    return _scheduler
+
+
 def shutdown_logging() -> None:
     """ロギングをシャットダウンする。"""
-    global _initialized, _handlers
+    global _initialized, _handlers, _scheduler
+
+    if _scheduler is not None:
+        _scheduler.stop()
+        _scheduler = None
 
     for handler in _handlers.values():
         handler.close()

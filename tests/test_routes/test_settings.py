@@ -236,8 +236,10 @@ class TestLoggingSettings:
             data={
                 "retention_days": "14",
                 "archive_retention_days": "60",
+                "max_size_mb": "20",
                 "max_folder_size_mb": "200",
                 "backup_count": "5",
+                "maintenance_interval_hours": "12",
             },
             follow_redirects=True,
         )
@@ -251,8 +253,10 @@ class TestLoggingSettings:
             data={
                 "retention_days": "0",
                 "archive_retention_days": "30",
+                "max_size_mb": "10",
                 "max_folder_size_mb": "500",
                 "backup_count": "3",
+                "maintenance_interval_hours": "24",
             },
             follow_redirects=True,
         )
@@ -266,23 +270,44 @@ class TestLoggingSettings:
             data={
                 "retention_days": "7",
                 "archive_retention_days": "400",
+                "max_size_mb": "10",
                 "max_folder_size_mb": "500",
                 "backup_count": "3",
+                "maintenance_interval_hours": "24",
             },
             follow_redirects=True,
         )
         assert response.status_code == 200
         assert "1-365" in response.data.decode("utf-8")
 
-    def test_invalid_max_size(self, admin_client):
+    def test_invalid_max_file_size(self, admin_client):
+        """無効な1ファイル最大サイズでエラー"""
+        response = admin_client.post(
+            "/settings/logging",
+            data={
+                "retention_days": "7",
+                "archive_retention_days": "30",
+                "max_size_mb": "0",
+                "max_folder_size_mb": "500",
+                "backup_count": "3",
+                "maintenance_interval_hours": "24",
+            },
+            follow_redirects=True,
+        )
+        assert response.status_code == 200
+        assert "1-100" in response.data.decode("utf-8")
+
+    def test_invalid_max_folder_size(self, admin_client):
         """無効な最大フォルダサイズでエラー"""
         response = admin_client.post(
             "/settings/logging",
             data={
                 "retention_days": "7",
                 "archive_retention_days": "30",
+                "max_size_mb": "10",
                 "max_folder_size_mb": "5",
                 "backup_count": "3",
+                "maintenance_interval_hours": "24",
             },
             follow_redirects=True,
         )
@@ -296,13 +321,49 @@ class TestLoggingSettings:
             data={
                 "retention_days": "7",
                 "archive_retention_days": "30",
+                "max_size_mb": "10",
                 "max_folder_size_mb": "500",
                 "backup_count": "0",
+                "maintenance_interval_hours": "24",
             },
             follow_redirects=True,
         )
         assert response.status_code == 200
         assert "1-10" in response.data.decode("utf-8")
+
+    def test_invalid_maintenance_interval(self, admin_client):
+        """無効なメンテナンス間隔でエラー"""
+        response = admin_client.post(
+            "/settings/logging",
+            data={
+                "retention_days": "7",
+                "archive_retention_days": "30",
+                "max_size_mb": "10",
+                "max_folder_size_mb": "500",
+                "backup_count": "3",
+                "maintenance_interval_hours": "200",
+            },
+            follow_redirects=True,
+        )
+        assert response.status_code == 200
+        assert "0-168" in response.data.decode("utf-8")
+
+    def test_save_zero_interval_disables(self, admin_client):
+        """メンテナンス間隔0で保存できる（無効化）"""
+        response = admin_client.post(
+            "/settings/logging",
+            data={
+                "retention_days": "7",
+                "archive_retention_days": "30",
+                "max_size_mb": "10",
+                "max_folder_size_mb": "500",
+                "backup_count": "3",
+                "maintenance_interval_hours": "0",
+            },
+            follow_redirects=True,
+        )
+        assert response.status_code == 200
+        assert "保存しました" in response.data.decode("utf-8")
 
     def test_user_cannot_access(self, user_client):
         """一般ユーザーはアクセスできない"""
@@ -319,6 +380,7 @@ class TestLoggingApi:
         assert response.status_code == 200
         data = response.get_json()
         assert "total_size_mb" in data
+        assert "scheduler_active" in data
 
     def test_maintenance_api(self, admin_client):
         """メンテナンスAPIが正常に応答する"""

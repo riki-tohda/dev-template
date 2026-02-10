@@ -193,6 +193,11 @@ def _save_system_config(db: Database, config: SystemConfig) -> None:
     db.set_setting(
         "logging.max_folder_size_mb", config.logging.max_folder_size_mb, "logging"
     )
+    db.set_setting(
+        "logging.maintenance_interval_hours",
+        config.logging.maintenance_interval_hours,
+        "logging",
+    )
 
 
 def _apply_flask_config(
@@ -266,6 +271,9 @@ def _setup_logging_from_db(db: Database) -> None:
             "retention_days": db.get_setting("logging.archive.retention_days", 30),
         },
         "max_folder_size_mb": db.get_setting("logging.max_folder_size_mb", 500),
+        "maintenance_interval_hours": db.get_setting(
+            "logging.maintenance_interval_hours", 24
+        ),
     }
     setup_logging(log_config)
 

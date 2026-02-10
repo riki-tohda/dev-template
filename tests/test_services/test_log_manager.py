@@ -11,7 +11,9 @@ from app.services.log_manager import (
     DailyDirectoryHandler,
     LogConfig,
     LogManager,
+    MaintenanceScheduler,
     get_logger,
+    get_scheduler,
     setup_logging,
     shutdown_logging,
 )
@@ -224,6 +226,87 @@ class TestLogManager:
         assert "total_size_mb" in stats
         assert "daily_directories" in stats
         assert stats["daily_directories"] == 1
+
+
+class TestMaintenanceScheduler:
+    """MaintenanceScheduler のテスト"""
+
+    @pytest.fixture
+    def log_manager(self, tmp_path: Path) -> LogManager:
+        """テスト用 LogManager"""
+        config = LogConfig.from_dict({}, tmp_path)
+        return LogManager(config)
+
+    def test_start_and_stop(self, log_manager: LogManager):
+        """スケジューラの開始と停止"""
+        scheduler = MaintenanceScheduler(log_manager, interval_hours=1)
+
+        assert not scheduler.is_running
+        assert scheduler.next_run is None
+
+        scheduler.start()
+        assert scheduler.is_running
+        assert scheduler.next_run is not None
+        assert scheduler.interval_hours == 1
+
+        scheduler.stop()
+        assert not scheduler.is_running
+        assert scheduler.next_run is None
+
+    def test_zero_interval_disables(self, log_manager: LogManager):
+        """interval_hours=0 ではスケジューラが開始されない"""
+        scheduler = MaintenanceScheduler(log_manager, interval_hours=0)
+        scheduler.start()
+        assert not scheduler.is_running
+
+    def test_next_run_is_future(self, log_manager: LogManager):
+        """次回実行予定時刻は未来の時刻"""
+        scheduler = MaintenanceScheduler(log_manager, interval_hours=1)
+        scheduler.start()
+
+        assert scheduler.next_run is not None
+        assert scheduler.next_run > datetime.now()
+
+        scheduler.stop()
+
+    def test_setup_logging_creates_scheduler(self, tmp_path: Path):
+        """setup_logging で interval > 0 の場合スケジューラが作成される"""
+        try:
+            setup_logging(
+                config={"maintenance_interval_hours": 1},
+                base_path=tmp_path,
+            )
+            scheduler = get_scheduler()
+            assert scheduler is not None
+            assert scheduler.is_running
+        finally:
+            shutdown_logging()
+
+    def test_setup_logging_no_scheduler_when_zero(self, tmp_path: Path):
+        """setup_logging で interval=0 の場合スケジューラが作成されない"""
+        try:
+            setup_logging(
+                config={"maintenance_interval_hours": 0},
+                base_path=tmp_path,
+            )
+            scheduler = get_scheduler()
+            assert scheduler is None
+        finally:
+            shutdown_logging()
+
+    def test_shutdown_stops_scheduler(self, tmp_path: Path):
+        """shutdown_logging でスケジューラが停止される"""
+        setup_logging(
+            config={"maintenance_interval_hours": 1},
+            base_path=tmp_path,
+        )
+        scheduler = get_scheduler()
+        assert scheduler is not None
+        assert scheduler.is_running
+
+        shutdown_logging()
+        assert not scheduler.is_running
+        assert get_scheduler() is None
 
 
 class TestSetupLogging:

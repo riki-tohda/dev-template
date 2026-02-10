@@ -346,8 +346,12 @@ def logging_settings():
             archive_retention_days = int(
                 request.form.get("archive_retention_days", 30)
             )
+            max_size_mb = int(request.form.get("max_size_mb", 10))
             max_folder_size_mb = int(request.form.get("max_folder_size_mb", 500))
             backup_count = int(request.form.get("backup_count", 3))
+            maintenance_interval_hours = int(
+                request.form.get("maintenance_interval_hours", 24)
+            )
 
             if retention_days < 1 or retention_days > 365:
                 raise ValueError("ログ保持期間は1-365日の範囲で指定してください")
@@ -355,12 +359,20 @@ def logging_settings():
                 raise ValueError(
                     "アーカイブ保持期間は1-365日の範囲で指定してください"
                 )
+            if max_size_mb < 1 or max_size_mb > 100:
+                raise ValueError(
+                    "1ファイル最大サイズは1-100MBの範囲で指定してください"
+                )
             if max_folder_size_mb < 10 or max_folder_size_mb > 10000:
                 raise ValueError(
                     "最大フォルダサイズは10-10000MBの範囲で指定してください"
                 )
             if backup_count < 1 or backup_count > 10:
                 raise ValueError("バックアップ数は1-10の範囲で指定してください")
+            if maintenance_interval_hours < 0 or maintenance_interval_hours > 168:
+                raise ValueError(
+                    "メンテナンス間隔は0-168時間の範囲で指定してください"
+                )
 
             db.set_setting("logging.retention_days", retention_days, "logging")
             db.set_setting(
@@ -368,21 +380,29 @@ def logging_settings():
                 archive_retention_days,
                 "logging",
             )
+            db.set_setting("logging.max_size_mb", max_size_mb, "logging")
             db.set_setting(
                 "logging.max_folder_size_mb", max_folder_size_mb, "logging"
             )
             db.set_setting("logging.backup_count", backup_count, "logging")
+            db.set_setting(
+                "logging.maintenance_interval_hours",
+                maintenance_interval_hours,
+                "logging",
+            )
 
             flash(
                 "ログ設定を保存しました（再起動後に反映されます）", "success"
             )
             logger.info(
                 "ログ設定を変更しました retention=%dd archive_retention=%dd "
-                "max_size=%dMB backup=%d user=%s",
+                "file_size=%dMB folder_size=%dMB backup=%d interval=%dh user=%s",
                 retention_days,
                 archive_retention_days,
+                max_size_mb,
                 max_folder_size_mb,
                 backup_count,
+                maintenance_interval_hours,
                 current_user.username,
             )
         except ValueError as e:
@@ -395,8 +415,12 @@ def logging_settings():
         "archive_retention_days": db.get_setting(
             "logging.archive.retention_days", 30
         ),
+        "max_size_mb": db.get_setting("logging.max_size_mb", 10),
         "max_folder_size_mb": db.get_setting("logging.max_folder_size_mb", 500),
         "backup_count": db.get_setting("logging.backup_count", 3),
+        "maintenance_interval_hours": db.get_setting(
+            "logging.maintenance_interval_hours", 24
+        ),
     }
     return render_template("settings/logging.html", settings=settings)
 
@@ -405,12 +429,27 @@ def logging_settings():
 @admin_required
 def logging_stats():
     """ログ統計情報APIエンドポイント"""
-    from app.services.log_manager import get_log_manager
+    from app.services.log_manager import get_log_manager, get_scheduler
 
     lm = get_log_manager()
     if lm is None:
         return jsonify({"error": "LogManager未初期化"}), 500
-    return jsonify(lm.get_statistics())
+
+    stats = lm.get_statistics()
+
+    scheduler = get_scheduler()
+    if scheduler is not None and scheduler.is_running:
+        stats["scheduler_active"] = True
+        stats["scheduler_interval_hours"] = scheduler.interval_hours
+        next_run = scheduler.next_run
+        stats["next_maintenance"] = (
+            next_run.strftime("%Y-%m-%d %H:%M") if next_run else None
+        )
+    else:
+        stats["scheduler_active"] = False
+        stats["next_maintenance"] = None
+
+    return jsonify(stats)
 
 
 @bp.route("/logging/api/maintenance", methods=["POST"])
