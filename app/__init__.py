@@ -74,7 +74,7 @@ def create_app(
 
     # DB未初期化（ユーザーなし）なら YAML → DB 投入
     if not db.has_users():
-        _initialize_database(db, config, applications, env_vars)
+        _initialize_database(db, config, applications, env_vars, loader)
 
     # DBから設定読み込み → Flask config反映
     _apply_flask_config(app, db, env_vars)
@@ -100,6 +100,7 @@ def _initialize_database(
     config: SystemConfig,
     applications: list,
     env_vars: dict[str, str | None],
+    loader: ConfigLoader | None = None,
 ) -> None:
     """データベースを初期データで初期化する。
 
@@ -108,6 +109,7 @@ def _initialize_database(
         config: システム設定
         applications: アプリケーションリスト
         env_vars: 環境変数
+        loader: ConfigLoaderインスタンス（スクリプト読み込み用）
     """
     # 初期ユーザー登録
     for user in config.initial_users:
@@ -127,6 +129,13 @@ def _initialize_database(
     for app in applications:
         db.create_application(app)
         logger.info(f"アプリケーションを登録しました: {app.id}")
+
+    # スクリプト登録
+    if loader is not None:
+        app_scripts = loader.load_app_scripts()
+        for script in app_scripts:
+            db.create_app_script(script)
+            logger.info(f"スクリプトを登録しました: {script.app_id}/{script.id}")
 
 
 def _save_system_config(db: Database, config: SystemConfig) -> None:

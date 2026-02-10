@@ -7,7 +7,7 @@ import bcrypt
 import pytest
 
 from app.services.database import Database
-from app.services.models import Application, InitialUser
+from app.services.models import AppScript, Application, InitialUser, ScriptExecution
 
 
 class TestDatabaseInitialization:
@@ -349,3 +349,245 @@ class TestConnectionContextManager:
         # ロールバックされているはず
         result = db.get_setting("test")
         assert result == "original"
+
+
+class TestAppScriptOperations:
+    """アプリスクリプト操作のテスト"""
+
+    @pytest.fixture
+    def db(self, tmp_path: Path) -> Database:
+        """テスト用データベース"""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        db.initialize()
+        return db
+
+    def test_create_and_get_app_script(self, db: Database) -> None:
+        """スクリプト作成と取得"""
+        script = AppScript(
+            id="setup",
+            app_id="test-app",
+            name="Setup Script",
+            script_path="/scripts/setup.sh",
+            mode="sync",
+            description="Initial setup",
+            timeout=120,
+        )
+        db.create_app_script(script)
+
+        result = db.get_app_script("test-app", "setup")
+
+        assert result is not None
+        assert result.id == "setup"
+        assert result.app_id == "test-app"
+        assert result.name == "Setup Script"
+        assert result.script_path == "/scripts/setup.sh"
+        assert result.mode == "sync"
+        assert result.description == "Initial setup"
+        assert result.timeout == 120
+        assert result.enabled is True
+
+    def test_get_app_script_not_found(self, db: Database) -> None:
+        """存在しないスクリプト"""
+        result = db.get_app_script("test-app", "nonexistent")
+        assert result is None
+
+    def test_get_app_scripts(self, db: Database) -> None:
+        """アプリのスクリプト一覧取得"""
+        db.create_app_script(AppScript(
+            id="setup",
+            app_id="test-app",
+            name="Setup",
+            script_path="/scripts/setup.sh",
+            sort_order=1,
+        ))
+        db.create_app_script(AppScript(
+            id="cleanup",
+            app_id="test-app",
+            name="Cleanup",
+            script_path="/scripts/cleanup.sh",
+            sort_order=0,
+        ))
+        db.create_app_script(AppScript(
+            id="other",
+            app_id="other-app",
+            name="Other",
+            script_path="/scripts/other.sh",
+        ))
+
+        scripts = db.get_app_scripts("test-app")
+
+        assert len(scripts) == 2
+        assert scripts[0].id == "cleanup"  # sort_order=0 が先
+        assert scripts[1].id == "setup"
+
+    def test_update_app_script(self, db: Database) -> None:
+        """スクリプト更新"""
+        db.create_app_script(AppScript(
+            id="setup",
+            app_id="test-app",
+            name="Setup",
+            script_path="/scripts/setup.sh",
+        ))
+
+        script = db.get_app_script("test-app", "setup")
+        assert script is not None
+
+        script.name = "Updated Setup"
+        script.enabled = False
+        db.update_app_script(script)
+
+        updated = db.get_app_script("test-app", "setup")
+        assert updated is not None
+        assert updated.name == "Updated Setup"
+        assert updated.enabled is False
+
+    def test_delete_app_script(self, db: Database) -> None:
+        """スクリプト削除"""
+        db.create_app_script(AppScript(
+            id="setup",
+            app_id="test-app",
+            name="Setup",
+            script_path="/scripts/setup.sh",
+        ))
+
+        db.delete_app_script("test-app", "setup")
+
+        result = db.get_app_script("test-app", "setup")
+        assert result is None
+
+    def test_create_app_script_upsert(self, db: Database) -> None:
+        """同じIDで再作成するとUPSERTされる"""
+        db.create_app_script(AppScript(
+            id="setup",
+            app_id="test-app",
+            name="Setup v1",
+            script_path="/scripts/setup.sh",
+        ))
+        db.create_app_script(AppScript(
+            id="setup",
+            app_id="test-app",
+            name="Setup v2",
+            script_path="/scripts/setup_v2.sh",
+        ))
+
+        result = db.get_app_script("test-app", "setup")
+        assert result is not None
+        assert result.name == "Setup v2"
+        assert result.script_path == "/scripts/setup_v2.sh"
+
+
+class TestScriptExecutionOperations:
+    """スクリプト実行履歴操作のテスト"""
+
+    @pytest.fixture
+    def db(self, tmp_path: Path) -> Database:
+        """テスト用データベース"""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        db.initialize()
+        return db
+
+    def test_create_and_get_execution(self, db: Database) -> None:
+        """実行レコード作成と取得"""
+        execution = ScriptExecution(
+            id=None,
+            script_id="setup",
+            app_id="test-app",
+            executed_by="admin",
+            mode="sync",
+            status="running",
+        )
+        exec_id = db.create_script_execution(execution)
+
+        assert exec_id > 0
+
+        result = db.get_script_execution(exec_id)
+        assert result is not None
+        assert result.script_id == "setup"
+        assert result.app_id == "test-app"
+        assert result.executed_by == "admin"
+        assert result.status == "running"
+
+    def test_get_execution_not_found(self, db: Database) -> None:
+        """存在しない実行レコード"""
+        result = db.get_script_execution(9999)
+        assert result is None
+
+    def test_update_execution(self, db: Database) -> None:
+        """実行レコード更新"""
+        execution = ScriptExecution(
+            id=None,
+            script_id="setup",
+            app_id="test-app",
+            executed_by="admin",
+            mode="sync",
+            status="running",
+        )
+        exec_id = db.create_script_execution(execution)
+
+        result = db.get_script_execution(exec_id)
+        assert result is not None
+
+        result.status = "completed"
+        result.exit_code = 0
+        result.stdout = "hello"
+        result.stderr = ""
+        result.finished_at = datetime(2025, 1, 1, 12, 0, 0)
+        db.update_script_execution(result)
+
+        updated = db.get_script_execution(exec_id)
+        assert updated is not None
+        assert updated.status == "completed"
+        assert updated.exit_code == 0
+        assert updated.stdout == "hello"
+
+    def test_get_script_executions(self, db: Database) -> None:
+        """実行履歴一覧取得"""
+        for i in range(3):
+            db.create_script_execution(ScriptExecution(
+                id=None,
+                script_id="setup",
+                app_id="test-app",
+                executed_by="admin",
+                mode="sync",
+                status="completed",
+            ))
+
+        executions = db.get_script_executions("test-app", "setup")
+        assert len(executions) == 3
+
+    def test_get_script_executions_with_limit(self, db: Database) -> None:
+        """制限付き実行履歴取得"""
+        for i in range(5):
+            db.create_script_execution(ScriptExecution(
+                id=None,
+                script_id="setup",
+                app_id="test-app",
+                executed_by="admin",
+                mode="sync",
+                status="completed",
+            ))
+
+        executions = db.get_script_executions("test-app", "setup", limit=2)
+        assert len(executions) == 2
+
+    def test_get_script_executions_all_scripts(self, db: Database) -> None:
+        """全スクリプトの実行履歴取得"""
+        db.create_script_execution(ScriptExecution(
+            id=None,
+            script_id="setup",
+            app_id="test-app",
+            executed_by="admin",
+            mode="sync",
+        ))
+        db.create_script_execution(ScriptExecution(
+            id=None,
+            script_id="cleanup",
+            app_id="test-app",
+            executed_by="admin",
+            mode="sync",
+        ))
+
+        executions = db.get_script_executions("test-app")
+        assert len(executions) == 2

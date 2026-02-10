@@ -11,6 +11,7 @@ import yaml
 
 from app.services.models import (
     AppInstallConfig,
+    AppScript,
     Application,
     InitialUser,
     LoggingArchiveConfig,
@@ -380,16 +381,8 @@ class ConfigLoader:
         Note:
             ファイルが存在しない場合は空リストを返す
         """
-        apps_path = self.config_dir / "apps.yaml"
-
-        if not apps_path.exists():
-            logger.warning(f"アプリケーション定義ファイルが見つかりません: {apps_path}")
-            return []
-
-        with open(apps_path, encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
-
-        applications_data = data.get("applications", [])
+        apps_data = self._load_apps_raw()
+        applications_data = apps_data.get("applications", [])
         applications = []
 
         for i, app_data in enumerate(applications_data):
@@ -411,6 +404,54 @@ class ConfigLoader:
             applications.append(app)
 
         return applications
+
+    def load_app_scripts(self) -> list[AppScript]:
+        """apps.yamlからスクリプト定義を読み込む。
+
+        Returns:
+            スクリプトリスト
+        """
+        apps_data = self._load_apps_raw()
+        applications_data = apps_data.get("applications", [])
+        scripts: list[AppScript] = []
+
+        for app_data in applications_data:
+            app_id = app_data["id"]
+            scripts_data = app_data.get("scripts", [])
+
+            for i, script_data in enumerate(scripts_data):
+                path_raw = script_data.get("path", "")
+                script_path = self._resolve(path_raw) if path_raw else ""
+
+                script = AppScript(
+                    id=script_data["id"],
+                    app_id=app_id,
+                    name=script_data["name"],
+                    script_path=str(script_path) if script_path else "",
+                    mode=script_data.get("mode", "sync"),
+                    description=script_data.get("description"),
+                    timeout=script_data.get("timeout", 60),
+                    sort_order=i,
+                    enabled=script_data.get("enabled", True),
+                )
+                scripts.append(script)
+
+        return scripts
+
+    def _load_apps_raw(self) -> dict[str, Any]:
+        """apps.yamlの生データを読み込む。
+
+        Returns:
+            生の設定データ辞書
+        """
+        apps_path = self.config_dir / "apps.yaml"
+
+        if not apps_path.exists():
+            logger.warning(f"アプリケーション定義ファイルが見つかりません: {apps_path}")
+            return {}
+
+        with open(apps_path, encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
 
     def validate_config(self, config: SystemConfig) -> None:
         """設定をバリデートする。

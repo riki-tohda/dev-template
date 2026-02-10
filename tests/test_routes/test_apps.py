@@ -128,3 +128,222 @@ class TestAppsInstallApi:
         """存在しないアプリのアップデート確認"""
         response = admin_client.get("/apps/api/nonexistent-app/check-update")
         assert response.status_code == 404
+
+
+class TestScriptsApi:
+    """スクリプト API のテスト"""
+
+    def test_get_scripts(self, admin_client):
+        """スクリプト一覧を取得できる"""
+        response = admin_client.get("/apps/api/test-app/scripts")
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert isinstance(data, list)
+
+    def test_get_scripts_requires_admin(self, user_client):
+        """一般ユーザーはスクリプト一覧を取得できない"""
+        response = user_client.get("/apps/api/test-app/scripts")
+        assert response.status_code == 403
+
+    def test_get_scripts_unauthenticated(self, client):
+        """未認証ユーザーはスクリプト一覧を取得できない"""
+        response = client.get("/apps/api/test-app/scripts")
+        assert response.status_code == 401
+
+    def test_get_scripts_app_not_found(self, admin_client):
+        """存在しないアプリのスクリプト"""
+        response = admin_client.get("/apps/api/nonexistent/scripts")
+        assert response.status_code == 404
+
+    def test_create_script(self, admin_client):
+        """スクリプトを登録できる"""
+        response = admin_client.post(
+            "/apps/api/test-app/scripts",
+            data=json.dumps({
+                "id": "new-script",
+                "name": "New Script",
+                "script_path": "scripts/new.bat",
+                "mode": "sync",
+                "timeout": 60,
+            }),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["success"] is True
+
+    def test_create_script_requires_admin(self, user_client):
+        """一般ユーザーはスクリプトを登録できない"""
+        response = user_client.post(
+            "/apps/api/test-app/scripts",
+            data=json.dumps({
+                "id": "new-script",
+                "name": "New Script",
+                "script_path": "scripts/new.bat",
+            }),
+            content_type="application/json",
+        )
+        assert response.status_code == 403
+
+    def test_create_script_missing_fields(self, admin_client):
+        """必須フィールドが不足"""
+        response = admin_client.post(
+            "/apps/api/test-app/scripts",
+            data=json.dumps({"id": "test"}),
+            content_type="application/json",
+        )
+        assert response.status_code == 400
+
+    def test_create_script_duplicate_id(self, admin_client):
+        """重複ID"""
+        # test-script は conftest で登録済み
+        response = admin_client.post(
+            "/apps/api/test-app/scripts",
+            data=json.dumps({
+                "id": "test-script",
+                "name": "Duplicate",
+                "script_path": "scripts/dup.bat",
+            }),
+            content_type="application/json",
+        )
+        assert response.status_code == 409
+
+    def test_update_script(self, admin_client):
+        """スクリプトを更新できる"""
+        response = admin_client.put(
+            "/apps/api/test-app/scripts/test-script",
+            data=json.dumps({"name": "Updated Name"}),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["success"] is True
+
+    def test_update_script_not_found(self, admin_client):
+        """存在しないスクリプトの更新"""
+        response = admin_client.put(
+            "/apps/api/test-app/scripts/nonexistent",
+            data=json.dumps({"name": "Updated"}),
+            content_type="application/json",
+        )
+        assert response.status_code == 404
+
+    def test_delete_script(self, admin_client):
+        """スクリプトを削除できる"""
+        # まず新しいスクリプトを登録
+        admin_client.post(
+            "/apps/api/test-app/scripts",
+            data=json.dumps({
+                "id": "to-delete",
+                "name": "Delete Me",
+                "script_path": "scripts/del.bat",
+            }),
+            content_type="application/json",
+        )
+
+        response = admin_client.delete("/apps/api/test-app/scripts/to-delete")
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["success"] is True
+
+    def test_delete_script_not_found(self, admin_client):
+        """存在しないスクリプトの削除"""
+        response = admin_client.delete("/apps/api/test-app/scripts/nonexistent")
+        assert response.status_code == 404
+
+    def test_delete_script_requires_admin(self, user_client):
+        """一般ユーザーはスクリプトを削除できない"""
+        response = user_client.delete("/apps/api/test-app/scripts/test-script")
+        assert response.status_code == 403
+
+
+class TestScriptExecutionApi:
+    """スクリプト実行 API のテスト"""
+
+    def test_execute_requires_admin(self, user_client):
+        """一般ユーザーはスクリプトを実行できない"""
+        response = user_client.post("/apps/api/test-app/scripts/test-script/execute")
+        assert response.status_code == 403
+
+    def test_execute_unauthenticated(self, client):
+        """未認証ユーザーはスクリプトを実行できない"""
+        response = client.post("/apps/api/test-app/scripts/test-script/execute")
+        assert response.status_code == 401
+
+    def test_execute_script_not_found(self, admin_client):
+        """存在しないスクリプトの実行"""
+        response = admin_client.post("/apps/api/test-app/scripts/nonexistent/execute")
+        assert response.status_code == 404
+
+    def test_execute_sync(self, admin_client, app):
+        """同期実行"""
+        with patch("app.routes.apps._get_script_executor") as mock_get:
+            from app.services.script_executor import ScriptExecutionResult
+
+            mock_executor = MagicMock()
+            mock_executor.validate_script.return_value = (True, "")
+            mock_executor.execute_sync.return_value = ScriptExecutionResult(
+                success=True,
+                exit_code=0,
+                stdout="hello",
+                stderr="",
+            )
+            mock_get.return_value = mock_executor
+
+            response = admin_client.post("/apps/api/test-app/scripts/test-script/execute")
+
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["success"] is True
+        assert data["execution_id"] is not None
+
+    def test_execute_validation_failure(self, admin_client, app):
+        """バリデーション失敗"""
+        with patch("app.routes.apps._get_script_executor") as mock_get:
+            mock_executor = MagicMock()
+            mock_executor.validate_script.return_value = (False, "パスが見つかりません")
+            mock_get.return_value = mock_executor
+
+            response = admin_client.post("/apps/api/test-app/scripts/test-script/execute")
+
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert data["success"] is False
+
+    def test_get_executions(self, admin_client):
+        """実行履歴を取得できる"""
+        response = admin_client.get("/apps/api/test-app/scripts/test-script/executions")
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert isinstance(data, list)
+
+    def test_get_executions_requires_admin(self, user_client):
+        """一般ユーザーは実行履歴を取得できない"""
+        response = user_client.get("/apps/api/test-app/scripts/test-script/executions")
+        assert response.status_code == 403
+
+    def test_get_execution_detail(self, admin_client, app):
+        """実行結果詳細を取得できる"""
+        # まず実行レコードを作成
+        with patch("app.routes.apps._get_script_executor") as mock_get:
+            from app.services.script_executor import ScriptExecutionResult
+
+            mock_executor = MagicMock()
+            mock_executor.validate_script.return_value = (True, "")
+            mock_executor.execute_sync.return_value = ScriptExecutionResult(
+                success=True, exit_code=0, stdout="ok", stderr=""
+            )
+            mock_get.return_value = mock_executor
+
+            resp = admin_client.post("/apps/api/test-app/scripts/test-script/execute")
+            exec_id = json.loads(resp.data)["execution_id"]
+
+        response = admin_client.get(f"/apps/api/scripts/executions/{exec_id}")
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["id"] == exec_id
+
+    def test_get_execution_detail_not_found(self, admin_client):
+        """存在しない実行レコード"""
+        response = admin_client.get("/apps/api/scripts/executions/99999")
+        assert response.status_code == 404

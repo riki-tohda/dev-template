@@ -9,7 +9,7 @@ from typing import Any, Generator
 
 import bcrypt
 
-from app.services.models import Application, InitialUser, User
+from app.services.models import AppScript, Application, InitialUser, ScriptExecution, User
 
 
 class Database:
@@ -91,6 +91,41 @@ class Database:
                 )
             """)
 
+            # app_scripts テーブル
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS app_scripts (
+                    id TEXT NOT NULL,
+                    app_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    script_path TEXT NOT NULL,
+                    mode TEXT NOT NULL DEFAULT 'sync',
+                    timeout INTEGER NOT NULL DEFAULT 60,
+                    sort_order INTEGER DEFAULT 0,
+                    enabled INTEGER DEFAULT 1,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id, app_id)
+                )
+            """)
+
+            # script_executions テーブル
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS script_executions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    script_id TEXT NOT NULL,
+                    app_id TEXT NOT NULL,
+                    executed_by TEXT NOT NULL,
+                    mode TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'running',
+                    exit_code INTEGER,
+                    stdout TEXT,
+                    stderr TEXT,
+                    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    finished_at DATETIME
+                )
+            """)
+
             # 既存テーブルへのカラム追加（マイグレーション）
             self._migrate_applications_table(cursor)
 
@@ -107,10 +142,12 @@ class Database:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT COUNT(*) FROM sqlite_master "
-                "WHERE type='table' AND name IN ('users', 'settings', 'applications')"
+                "WHERE type='table' AND name IN ("
+                "'users', 'settings', 'applications', "
+                "'app_scripts', 'script_executions')"
             )
             count = cursor.fetchone()[0]
-            return count == 3
+            return count >= 3
 
     def has_users(self) -> bool:
         """ユーザーが存在するかどうかを確認する。
@@ -449,6 +486,275 @@ class Database:
             return datetime.fromisoformat(value.replace(" ", "T"))
         except (ValueError, AttributeError):
             return None
+
+    # スクリプト操作
+
+    def create_app_script(self, script: AppScript) -> None:
+        """アプリスクリプトを作成または更新する。
+
+        Args:
+            script: スクリプト情報
+        """
+        with self.connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO app_scripts (
+                    id, app_id, name, description, script_path,
+                    mode, timeout, sort_order, enabled
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id, app_id) DO UPDATE SET
+                    name = excluded.name,
+                    description = excluded.description,
+                    script_path = excluded.script_path,
+                    mode = excluded.mode,
+                    timeout = excluded.timeout,
+                    sort_order = excluded.sort_order,
+                    enabled = excluded.enabled,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    script.id,
+                    script.app_id,
+                    script.name,
+                    script.description,
+                    script.script_path,
+                    script.mode,
+                    script.timeout,
+                    script.sort_order,
+                    1 if script.enabled else 0,
+                ),
+            )
+
+    def get_app_scripts(self, app_id: str) -> list[AppScript]:
+        """アプリのスクリプト一覧を取得する。
+
+        Args:
+            app_id: アプリケーションID
+
+        Returns:
+            スクリプトリスト
+        """
+        with self.connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM app_scripts WHERE app_id = ? ORDER BY sort_order, id",
+                (app_id,),
+            )
+            rows = cursor.fetchall()
+            return [self._row_to_app_script(row) for row in rows]
+
+    def get_app_script(self, app_id: str, script_id: str) -> AppScript | None:
+        """特定のアプリスクリプトを取得する。
+
+        Args:
+            app_id: アプリケーションID
+            script_id: スクリプトID
+
+        Returns:
+            スクリプト情報。見つからない場合はNone
+        """
+        with self.connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM app_scripts WHERE app_id = ? AND id = ?",
+                (app_id, script_id),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return self._row_to_app_script(row)
+
+    def update_app_script(self, script: AppScript) -> None:
+        """アプリスクリプトを更新する。
+
+        Args:
+            script: スクリプト情報
+        """
+        with self.connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE app_scripts
+                SET name = ?, description = ?, script_path = ?,
+                    mode = ?, timeout = ?, sort_order = ?, enabled = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND app_id = ?
+                """,
+                (
+                    script.name,
+                    script.description,
+                    script.script_path,
+                    script.mode,
+                    script.timeout,
+                    script.sort_order,
+                    1 if script.enabled else 0,
+                    script.id,
+                    script.app_id,
+                ),
+            )
+
+    def delete_app_script(self, app_id: str, script_id: str) -> None:
+        """アプリスクリプトを削除する。
+
+        Args:
+            app_id: アプリケーションID
+            script_id: スクリプトID
+        """
+        with self.connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM app_scripts WHERE app_id = ? AND id = ?",
+                (app_id, script_id),
+            )
+
+    def _row_to_app_script(self, row: sqlite3.Row) -> AppScript:
+        """SQLite行をAppScriptオブジェクトに変換する。"""
+        return AppScript(
+            id=row["id"],
+            app_id=row["app_id"],
+            name=row["name"],
+            description=row["description"],
+            script_path=row["script_path"],
+            mode=row["mode"],
+            timeout=row["timeout"],
+            sort_order=row["sort_order"],
+            enabled=bool(row["enabled"]),
+        )
+
+    # スクリプト実行履歴操作
+
+    def create_script_execution(self, execution: ScriptExecution) -> int:
+        """スクリプト実行レコードを作成する。
+
+        Args:
+            execution: 実行情報
+
+        Returns:
+            作成されたレコードのID
+        """
+        with self.connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO script_executions (
+                    script_id, app_id, executed_by, mode, status,
+                    exit_code, stdout, stderr, started_at, finished_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    execution.script_id,
+                    execution.app_id,
+                    execution.executed_by,
+                    execution.mode,
+                    execution.status,
+                    execution.exit_code,
+                    execution.stdout,
+                    execution.stderr,
+                    execution.started_at
+                    or datetime.now().isoformat(),
+                    execution.finished_at,
+                ),
+            )
+            return cursor.lastrowid or 0
+
+    def update_script_execution(self, execution: ScriptExecution) -> None:
+        """スクリプト実行レコードを更新する。
+
+        Args:
+            execution: 実行情報
+        """
+        with self.connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE script_executions
+                SET status = ?, exit_code = ?, stdout = ?,
+                    stderr = ?, finished_at = ?
+                WHERE id = ?
+                """,
+                (
+                    execution.status,
+                    execution.exit_code,
+                    execution.stdout,
+                    execution.stderr,
+                    execution.finished_at,
+                    execution.id,
+                ),
+            )
+
+    def get_script_execution(self, execution_id: int) -> ScriptExecution | None:
+        """スクリプト実行レコードを取得する。
+
+        Args:
+            execution_id: 実行ID
+
+        Returns:
+            実行情報。見つからない場合はNone
+        """
+        with self.connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM script_executions WHERE id = ?",
+                (execution_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return self._row_to_script_execution(row)
+
+    def get_script_executions(
+        self,
+        app_id: str,
+        script_id: str | None = None,
+        limit: int = 20,
+    ) -> list[ScriptExecution]:
+        """スクリプト実行履歴を取得する。
+
+        Args:
+            app_id: アプリケーションID
+            script_id: スクリプトID（Noneなら全スクリプト）
+            limit: 取得件数
+
+        Returns:
+            実行履歴リスト
+        """
+        with self.connection() as conn:
+            cursor = conn.cursor()
+            if script_id:
+                cursor.execute(
+                    "SELECT * FROM script_executions "
+                    "WHERE app_id = ? AND script_id = ? "
+                    "ORDER BY id DESC LIMIT ?",
+                    (app_id, script_id, limit),
+                )
+            else:
+                cursor.execute(
+                    "SELECT * FROM script_executions "
+                    "WHERE app_id = ? "
+                    "ORDER BY id DESC LIMIT ?",
+                    (app_id, limit),
+                )
+            rows = cursor.fetchall()
+            return [self._row_to_script_execution(row) for row in rows]
+
+    def _row_to_script_execution(self, row: sqlite3.Row) -> ScriptExecution:
+        """SQLite行をScriptExecutionオブジェクトに変換する。"""
+        return ScriptExecution(
+            id=row["id"],
+            script_id=row["script_id"],
+            app_id=row["app_id"],
+            executed_by=row["executed_by"],
+            mode=row["mode"],
+            status=row["status"],
+            exit_code=row["exit_code"],
+            stdout=row["stdout"],
+            stderr=row["stderr"],
+            started_at=self._parse_datetime(row["started_at"]),
+            finished_at=self._parse_datetime(row["finished_at"]),
+        )
 
     def _migrate_applications_table(self, cursor: sqlite3.Cursor) -> None:
         """applicationsテーブルのマイグレーションを行う。"""

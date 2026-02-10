@@ -112,6 +112,98 @@
     </div>
 </div>
 {% endif %}
+
+{% if current_user.is_admin %}
+<!-- Scripts -->
+<div class="card-modern">
+    <div class="card-modern-header">
+        <i class="bi bi-terminal"></i> スクリプト
+    </div>
+    <div class="card-modern-body">
+        <div id="scripts-list">
+            <p>読み込み中...</p>
+        </div>
+
+        <button id="btn-add-script" class="btn-outline mt-2" type="button">
+            <i class="bi bi-plus-circle"></i> スクリプト登録
+        </button>
+    </div>
+</div>
+
+<!-- スクリプト登録ダイアログ -->
+<dialog id="dialog-add-script">
+    <article style="min-width: 400px;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('dialog-add-script').close()"></button>
+            <h3>スクリプト登録</h3>
+        </header>
+        <form id="form-add-script">
+            <label for="script-id">ID <small>(英数字・ハイフン)</small></label>
+            <input type="text" id="script-id" name="id" required pattern="[a-zA-Z0-9_-]+" placeholder="setup">
+
+            <label for="script-name">名前</label>
+            <input type="text" id="script-name" name="name" required placeholder="初期セットアップ">
+
+            <label for="script-desc">説明 <small>(任意)</small></label>
+            <input type="text" id="script-desc" name="description" placeholder="アプリの初期設定を実行">
+
+            <label for="script-path">スクリプトパス</label>
+            <input type="text" id="script-path" name="script_path" required placeholder="scripts/setup.bat">
+
+            <label for="script-mode">実行モード</label>
+            <select id="script-mode" name="mode">
+                <option value="sync">同期</option>
+                <option value="async">非同期</option>
+            </select>
+
+            <label for="script-timeout">タイムアウト (秒)</label>
+            <input type="number" id="script-timeout" name="timeout" value="60" min="1" max="3600">
+
+            <footer>
+                <button type="button" class="btn-outline" onclick="document.getElementById('dialog-add-script').close()">キャンセル</button>
+                <button type="submit" class="btn-primary-modern">登録</button>
+            </footer>
+        </form>
+    </article>
+</dialog>
+
+<!-- 実行結果ダイアログ -->
+<dialog id="dialog-execution-result">
+    <article style="min-width: 500px; max-width: 80vw;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('dialog-execution-result').close()"></button>
+            <h3>実行結果</h3>
+        </header>
+        <div id="execution-result-content">
+            <p>ステータス: <strong id="exec-status">--</strong></p>
+            <p>終了コード: <span id="exec-exit-code">--</span></p>
+            <h4>標準出力</h4>
+            <pre id="exec-stdout" style="max-height: 300px; overflow: auto; background: var(--pico-code-background-color); padding: 1rem; font-size: 0.85rem;"></pre>
+            <h4>標準エラー</h4>
+            <pre id="exec-stderr" style="max-height: 200px; overflow: auto; background: var(--pico-code-background-color); padding: 1rem; font-size: 0.85rem;"></pre>
+        </div>
+        <footer>
+            <button type="button" class="btn-outline" onclick="document.getElementById('dialog-execution-result').close()">閉じる</button>
+        </footer>
+    </article>
+</dialog>
+
+<!-- 実行履歴ダイアログ -->
+<dialog id="dialog-executions">
+    <article style="min-width: 600px; max-width: 80vw;">
+        <header>
+            <button aria-label="Close" rel="prev" onclick="document.getElementById('dialog-executions').close()"></button>
+            <h3>実行履歴</h3>
+        </header>
+        <div id="executions-content">
+            <p>読み込み中...</p>
+        </div>
+        <footer>
+            <button type="button" class="btn-outline" onclick="document.getElementById('dialog-executions').close()">閉じる</button>
+        </footer>
+    </article>
+</dialog>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -183,6 +275,193 @@ document.addEventListener('DOMContentLoaded', function() {
     var isAdmin = {{ 'true' if current_user.is_admin else 'false' }};
     var isInstalled = {{ 'true' if app.installed else 'false' }};
 
+    // --- スクリプト管理 (admin only) ---
+    if (isAdmin) {
+        function loadScripts() {
+            fetch('/apps/api/' + appId + '/scripts')
+                .then(function(r) { return r.json(); })
+                .then(function(scripts) {
+                    var container = document.getElementById('scripts-list');
+                    if (!scripts.length) {
+                        container.innerHTML = '<p>登録されたスクリプトはありません。</p>';
+                        return;
+                    }
+                    var html = '<table role="grid"><thead><tr>' +
+                        '<th>名前</th><th>モード</th><th>パス</th><th>操作</th>' +
+                        '</tr></thead><tbody>';
+                    scripts.forEach(function(s) {
+                        var modeBadge = s.mode === 'async'
+                            ? '<span class="badge badge-info">非同期</span>'
+                            : '<span class="badge badge-secondary">同期</span>';
+                        var enabledClass = s.enabled ? '' : ' style="opacity:0.5"';
+                        html += '<tr' + enabledClass + '>';
+                        html += '<td><strong>' + escapeHtml(s.name) + '</strong>';
+                        if (s.description) html += '<br><small>' + escapeHtml(s.description) + '</small>';
+                        html += '</td>';
+                        html += '<td>' + modeBadge + '</td>';
+                        html += '<td><code style="font-size:0.8rem">' + escapeHtml(s.script_path) + '</code></td>';
+                        html += '<td>';
+                        html += '<button class="btn-outline btn-sm" onclick="executeScript(\'' + s.id + '\')" ' + (s.enabled ? '' : 'disabled') + '><i class="bi bi-play"></i></button> ';
+                        html += '<button class="btn-outline-secondary btn-sm" onclick="showExecutions(\'' + s.id + '\')"><i class="bi bi-clock-history"></i></button> ';
+                        html += '<button class="btn-outline-danger btn-sm" onclick="deleteScript(\'' + s.id + '\')"><i class="bi bi-trash"></i></button>';
+                        html += '</td></tr>';
+                    });
+                    html += '</tbody></table>';
+                    container.innerHTML = html;
+                })
+                .catch(function(err) {
+                    document.getElementById('scripts-list').innerHTML = '<p>読み込みに失敗しました。</p>';
+                });
+        }
+
+        function escapeHtml(text) {
+            var div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function executeScript(scriptId) {
+            if (!confirm('スクリプトを実行しますか？')) return;
+
+            fetch('/apps/api/' + appId + '/scripts/' + scriptId + '/execute', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.execution_id && data.message === '非同期実行を開始しました') {
+                    alert('非同期実行を開始しました。履歴から結果を確認してください。');
+                    pollExecution(data.execution_id);
+                } else {
+                    showExecutionResult(data);
+                }
+            })
+            .catch(function(err) {
+                alert('実行に失敗しました');
+            });
+        }
+        window.executeScript = executeScript;
+
+        function showExecutionResult(data) {
+            var statusLabels = {
+                'running': '実行中', 'completed': '完了', 'failed': '失敗', 'timeout': 'タイムアウト'
+            };
+
+            document.getElementById('exec-status').textContent = statusLabels[data.status] || (data.success ? '完了' : '失敗');
+            document.getElementById('exec-exit-code').textContent = data.exit_code !== null && data.exit_code !== undefined ? data.exit_code : '--';
+            document.getElementById('exec-stdout').textContent = data.stdout || '(なし)';
+            document.getElementById('exec-stderr').textContent = data.stderr || '(なし)';
+            document.getElementById('dialog-execution-result').showModal();
+        }
+
+        function pollExecution(executionId) {
+            var interval = setInterval(function() {
+                fetch('/apps/api/scripts/executions/' + executionId)
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data.status !== 'running') {
+                            clearInterval(interval);
+                            showExecutionResult(data);
+                        }
+                    })
+                    .catch(function() { clearInterval(interval); });
+            }, 2000);
+        }
+
+        function showExecutions(scriptId) {
+            var container = document.getElementById('executions-content');
+            container.innerHTML = '<p>読み込み中...</p>';
+            document.getElementById('dialog-executions').showModal();
+
+            fetch('/apps/api/' + appId + '/scripts/' + scriptId + '/executions')
+                .then(function(r) { return r.json(); })
+                .then(function(executions) {
+                    if (!executions.length) {
+                        container.innerHTML = '<p>実行履歴がありません。</p>';
+                        return;
+                    }
+                    var statusLabels = {
+                        'running': '実行中', 'completed': '完了', 'failed': '失敗', 'timeout': 'タイムアウト'
+                    };
+                    var html = '<table role="grid"><thead><tr>' +
+                        '<th>ID</th><th>ステータス</th><th>終了コード</th><th>実行者</th><th>開始</th><th>操作</th>' +
+                        '</tr></thead><tbody>';
+                    executions.forEach(function(e) {
+                        html += '<tr>';
+                        html += '<td>' + e.id + '</td>';
+                        html += '<td>' + (statusLabels[e.status] || e.status) + '</td>';
+                        html += '<td>' + (e.exit_code !== null ? e.exit_code : '--') + '</td>';
+                        html += '<td>' + escapeHtml(e.executed_by) + '</td>';
+                        html += '<td>' + (e.started_at ? new Date(e.started_at).toLocaleString() : '--') + '</td>';
+                        html += '<td><button class="btn-outline btn-sm" onclick="viewExecution(' + e.id + ')"><i class="bi bi-eye"></i></button></td>';
+                        html += '</tr>';
+                    });
+                    html += '</tbody></table>';
+                    container.innerHTML = html;
+                })
+                .catch(function() {
+                    container.innerHTML = '<p>読み込みに失敗しました。</p>';
+                });
+        }
+        window.showExecutions = showExecutions;
+
+        function viewExecution(executionId) {
+            fetch('/apps/api/scripts/executions/' + executionId)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    document.getElementById('dialog-executions').close();
+                    showExecutionResult(data);
+                })
+                .catch(function() { alert('取得に失敗しました'); });
+        }
+        window.viewExecution = viewExecution;
+
+        function deleteScript(scriptId) {
+            if (!confirm('このスクリプトを削除しますか？')) return;
+
+            fetch('/apps/api/' + appId + '/scripts/' + scriptId, { method: 'DELETE' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.success) loadScripts();
+                    else alert(data.message);
+                })
+                .catch(function() { alert('削除に失敗しました'); });
+        }
+        window.deleteScript = deleteScript;
+
+        document.getElementById('btn-add-script').addEventListener('click', function() {
+            document.getElementById('form-add-script').reset();
+            document.getElementById('dialog-add-script').showModal();
+        });
+
+        document.getElementById('form-add-script').addEventListener('submit', function(e) {
+            e.preventDefault();
+            var formData = new FormData(this);
+            var body = {};
+            formData.forEach(function(val, key) { body[key] = val; });
+            body.timeout = parseInt(body.timeout) || 60;
+
+            fetch('/apps/api/' + appId + '/scripts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.success) {
+                    document.getElementById('dialog-add-script').close();
+                    loadScripts();
+                } else {
+                    alert(data.message);
+                }
+            })
+            .catch(function() { alert('登録に失敗しました'); });
+        });
+
+        loadScripts();
+    }
+
+    // --- GitHub / インストール管理 ---
     if (isAdmin) {
         if (!isInstalled) {
             document.getElementById('btn-install').addEventListener('click', function() {

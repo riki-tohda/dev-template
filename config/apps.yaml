@@ -17,6 +17,17 @@ applications:
     health_check_path: "/health"
     auto_restart: true
 
+    # スクリプト定義
+    scripts:
+      - id: "setup"
+        name: "初期セットアップ"
+        description: "アプリの初期設定を実行"
+        path:
+          windows: "scripts\\label-printer\\setup.bat"
+          linux: "scripts/label-printer/setup.sh"
+        mode: "sync"
+        timeout: 120
+
   - id: "file-transfer"
     name: "ファイル転送アプリ"
     description: "ファイルの転送処理を管理"
