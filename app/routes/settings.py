@@ -2,6 +2,8 @@
 
 from functools import wraps
 
+import re
+
 import bcrypt
 from flask import (
     Blueprint,
@@ -468,6 +470,63 @@ def logging_maintenance():
         current_user.username,
     )
     return jsonify(result)
+
+
+# --- ログビューア ---
+
+_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_LOG_TYPE_PATTERN = re.compile(r"^[a-z]+$")
+
+
+@bp.route("/logs")
+@admin_required
+def logs():
+    """ログビューア画面を表示する。"""
+    from app.services.log_manager import list_log_dates
+
+    dates = list_log_dates()
+    return render_template("settings/logs.html", dates=dates)
+
+
+@bp.route("/logs/api/files")
+@admin_required
+def logs_api_files():
+    """指定日付のログファイル一覧を返す。"""
+    from app.services.log_manager import list_log_files
+
+    date = request.args.get("date", "")
+    if not _DATE_PATTERN.match(date):
+        return jsonify({"error": "日付形式が不正です（YYYY-MM-DD）"}), 400
+
+    files = list_log_files(date)
+    return jsonify(files)
+
+
+@bp.route("/logs/api/content")
+@admin_required
+def logs_api_content():
+    """ログファイルの内容を返す。"""
+    from app.services.log_manager import read_log_tail
+
+    date = request.args.get("date", "")
+    log_type = request.args.get("type", "")
+    lines = request.args.get("lines", "500")
+
+    if not _DATE_PATTERN.match(date):
+        return jsonify({"error": "日付形式が不正です（YYYY-MM-DD）"}), 400
+
+    if not log_type or not _LOG_TYPE_PATTERN.match(log_type):
+        return jsonify({"error": "ログ種別が不正です"}), 400
+
+    try:
+        lines_int = int(lines)
+        if lines_int < 1 or lines_int > 10000:
+            raise ValueError
+    except (ValueError, TypeError):
+        return jsonify({"error": "行数が不正です"}), 400
+
+    content = read_log_tail(date, log_type, lines_int)
+    return jsonify({"lines": content, "total": len(content)})
 
 
 # --- プロファイル（全ユーザー共通） ---

@@ -14,6 +14,9 @@ from app.services.log_manager import (
     MaintenanceScheduler,
     get_logger,
     get_scheduler,
+    list_log_dates,
+    list_log_files,
+    read_log_tail,
     setup_logging,
     shutdown_logging,
 )
@@ -365,3 +368,130 @@ class TestGetLogger:
 
         logger = get_logger("app")
         assert logger is not None
+
+
+class TestNewLogTypes:
+    """access/install ログ種別のテスト"""
+
+    def teardown_method(self):
+        shutdown_logging()
+
+    def test_access_in_log_types(self):
+        """access が LOG_TYPES に含まれる"""
+        assert "access" in LOG_TYPES
+
+    def test_install_in_log_types(self):
+        """install が LOG_TYPES に含まれる"""
+        assert "install" in LOG_TYPES
+
+    def test_get_access_logger(self, tmp_path: Path):
+        """access ロガーを取得できる"""
+        setup_logging(base_path=tmp_path)
+        logger = get_logger("access")
+        assert logger is not None
+        assert logger.name == "access"
+
+    def test_get_install_logger(self, tmp_path: Path):
+        """install ロガーを取得できる"""
+        setup_logging(base_path=tmp_path)
+        logger = get_logger("install")
+        assert logger is not None
+        assert logger.name == "install"
+
+    def test_access_log_writes_to_file(self, tmp_path: Path):
+        """access ロガーがファイルに書き込める"""
+        setup_logging(base_path=tmp_path)
+        logger = get_logger("access")
+        logger.info("test access entry")
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        log_file = tmp_path / "logs" / today / "access.log"
+        assert log_file.exists()
+        assert "test access entry" in log_file.read_text()
+
+    def test_install_log_writes_to_file(self, tmp_path: Path):
+        """install ロガーがファイルに書き込める"""
+        setup_logging(base_path=tmp_path)
+        logger = get_logger("install")
+        logger.info("test install entry")
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        log_file = tmp_path / "logs" / today / "install.log"
+        assert log_file.exists()
+        assert "test install entry" in log_file.read_text()
+
+
+class TestLogViewerFunctions:
+    """ログビューア関数のテスト"""
+
+    def teardown_method(self):
+        shutdown_logging()
+
+    def test_list_log_dates(self, tmp_path: Path):
+        """日付一覧を取得できる"""
+        setup_logging(base_path=tmp_path)
+        logger = get_logger("app")
+        logger.info("test entry")
+
+        dates = list_log_dates()
+        today = datetime.now().strftime("%Y-%m-%d")
+        assert today in dates
+
+    def test_list_log_dates_sorted_descending(self, tmp_path: Path):
+        """日付一覧が降順にソートされる"""
+        setup_logging(base_path=tmp_path)
+
+        # 複数の日付ディレクトリを作成
+        logs_dir = tmp_path / "logs"
+        (logs_dir / "2025-01-01").mkdir(parents=True, exist_ok=True)
+        (logs_dir / "2025-01-03").mkdir(parents=True, exist_ok=True)
+        (logs_dir / "2025-01-02").mkdir(parents=True, exist_ok=True)
+
+        dates = list_log_dates()
+        # 降順であること（今日の日付も含む場合があるのでサブセットで確認）
+        test_dates = [d for d in dates if d.startswith("2025-01")]
+        assert test_dates == sorted(test_dates, reverse=True)
+
+    def test_list_log_files(self, tmp_path: Path):
+        """指定日付のファイル一覧を取得できる"""
+        setup_logging(base_path=tmp_path)
+        logger = get_logger("app")
+        logger.info("test entry")
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        files = list_log_files(today)
+        assert "app" in files
+
+    def test_list_log_files_nonexistent_date(self, tmp_path: Path):
+        """存在しない日付は空リストを返す"""
+        setup_logging(base_path=tmp_path)
+        files = list_log_files("1999-01-01")
+        assert files == []
+
+    def test_read_log_tail(self, tmp_path: Path):
+        """ログ末尾を取得できる"""
+        setup_logging(base_path=tmp_path)
+        logger = get_logger("app")
+        for i in range(10):
+            logger.info("line %d", i)
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        lines = read_log_tail(today, "app", lines=5)
+        assert len(lines) == 5
+        assert "line 9" in lines[-1]
+
+    def test_read_log_tail_nonexistent_file(self, tmp_path: Path):
+        """存在しないファイルは空リストを返す"""
+        setup_logging(base_path=tmp_path)
+        lines = read_log_tail("1999-01-01", "app")
+        assert lines == []
+
+    def test_read_log_tail_default_lines(self, tmp_path: Path):
+        """デフォルト行数で取得できる"""
+        setup_logging(base_path=tmp_path)
+        logger = get_logger("app")
+        logger.info("single line")
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        lines = read_log_tail(today, "app")
+        assert len(lines) >= 1

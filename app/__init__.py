@@ -4,6 +4,7 @@ __version__ = "1.0.0"
 
 import logging
 import secrets
+import time
 from pathlib import Path
 
 from flask import Flask
@@ -91,6 +92,9 @@ def create_app(
 
     # Blueprintの登録
     _register_blueprints(app)
+
+    # アクセスログミドルウェアの登録
+    _register_access_logging(app)
 
     return app
 
@@ -285,6 +289,55 @@ def _setup_logging_from_db(db: Database) -> None:
         ),
     }
     setup_logging(log_config)
+
+
+def _register_access_logging(app: Flask) -> None:
+    """アクセスログミドルウェアを登録する。
+
+    Args:
+        app: Flaskアプリケーション
+    """
+    from app.services.log_manager import get_logger
+
+    access_logger = get_logger("access")
+
+    _EXCLUDED_PREFIXES = ("/static/", "/favicon.ico")
+
+    @app.before_request
+    def _access_log_before():
+        from flask import g, request
+
+        if not request.path.startswith(_EXCLUDED_PREFIXES):
+            g._access_start_time = time.monotonic()
+
+    @app.after_request
+    def _access_log_after(response):
+        from flask import g, request
+        from flask_login import current_user
+
+        if request.path.startswith(_EXCLUDED_PREFIXES):
+            return response
+
+        duration_ms = 0.0
+        start = getattr(g, "_access_start_time", None)
+        if start is not None:
+            duration_ms = (time.monotonic() - start) * 1000
+
+        user = "anonymous"
+        if hasattr(current_user, "is_authenticated") and current_user.is_authenticated:
+            user = current_user.username
+
+        access_logger.info(
+            "method=%s path=%s status=%d duration=%.1fms user=%s ip=%s",
+            request.method,
+            request.path,
+            response.status_code,
+            duration_ms,
+            user,
+            request.remote_addr,
+        )
+
+        return response
 
 
 def _register_blueprints(app: Flask) -> None:

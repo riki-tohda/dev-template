@@ -7,7 +7,9 @@
     ├── YYYY-MM-DD/
     │   ├── app.log
     │   ├── resource.log
-    │   └── auth.log
+    │   ├── auth.log
+    │   ├── access.log
+    │   └── install.log
     └── archive/
         └── YYYY-MM-DD.tar.gz
 """
@@ -23,8 +25,8 @@ from pathlib import Path
 from typing import Literal
 
 # ログ種別
-LogType = Literal["app", "resource", "auth"]
-LOG_TYPES: list[LogType] = ["app", "resource", "auth"]
+LogType = Literal["app", "resource", "auth", "access", "install"]
+LOG_TYPES: list[LogType] = ["app", "resource", "auth", "access", "install"]
 
 # デフォルト設定
 DEFAULT_CONFIG = {
@@ -45,6 +47,7 @@ DEFAULT_CONFIG = {
 
 # フォーマット
 LOG_FORMAT = "%(asctime)s.%(msecs)03d [%(levelname)s] %(name)s: %(message)s"
+ACCESS_LOG_FORMAT = "%(asctime)s.%(msecs)03d %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
@@ -487,6 +490,7 @@ def setup_logging(
 
     # フォーマッターを作成
     formatter = logging.Formatter(LOG_FORMAT, DATE_FORMAT)
+    access_formatter = logging.Formatter(ACCESS_LOG_FORMAT, DATE_FORMAT)
 
     # 各ログ種別のハンドラーを設定
     for log_type in LOG_TYPES:
@@ -501,7 +505,8 @@ def setup_logging(
             max_bytes=_config.max_size_bytes,
             backup_count=_config.backup_count,
         )
-        handler.setFormatter(formatter)
+        current_formatter = access_formatter if log_type == "access" else formatter
+        handler.setFormatter(current_formatter)
         handler.setLevel(log_level)
         logger.addHandler(handler)
         _handlers[log_type] = handler
@@ -509,7 +514,7 @@ def setup_logging(
         # コンソールハンドラー
         if _config.console_enabled:
             console_handler = logging.StreamHandler()
-            console_handler.setFormatter(formatter)
+            console_handler.setFormatter(current_formatter)
             console_handler.setLevel(log_level)
             logger.addHandler(console_handler)
 
@@ -534,7 +539,7 @@ def get_logger(name: LogType) -> logging.Logger:
     """指定された種別のロガーを取得する。
 
     Args:
-        name: ログ種別（"app", "resource", "auth"）
+        name: ログ種別（"app", "resource", "auth", "access", "install"）
 
     Returns:
         Logger インスタンス
@@ -568,6 +573,72 @@ def get_scheduler() -> MaintenanceScheduler | None:
         MaintenanceScheduler インスタンス。未初期化の場合は None。
     """
     return _scheduler
+
+
+def list_log_dates() -> list[str]:
+    """利用可能なログ日付一覧を取得する（降順）。
+
+    Returns:
+        日付文字列のリスト（例: ["2025-01-15", "2025-01-14"]）
+    """
+    if _config is None or not _config.directory.exists():
+        return []
+
+    dates = []
+    for item in _config.directory.iterdir():
+        if item.is_dir():
+            try:
+                datetime.strptime(item.name, "%Y-%m-%d")
+                dates.append(item.name)
+            except ValueError:
+                continue
+
+    return sorted(dates, reverse=True)
+
+
+def list_log_files(date: str) -> list[str]:
+    """指定日付のログファイル一覧を取得する。
+
+    Args:
+        date: 日付文字列（YYYY-MM-DD）
+
+    Returns:
+        ログ種別名のリスト（例: ["app", "auth", "access"]）
+    """
+    if _config is None:
+        return []
+
+    daily_dir = _config.directory / date
+    if not daily_dir.exists():
+        return []
+
+    files = []
+    for log_file in sorted(daily_dir.glob("*.log")):
+        files.append(log_file.stem)
+
+    return files
+
+
+def read_log_tail(date: str, log_type: str, lines: int = 500) -> list[str]:
+    """ログファイルの末尾N行を取得する。
+
+    Args:
+        date: 日付文字列（YYYY-MM-DD）
+        log_type: ログ種別
+        lines: 取得する行数
+
+    Returns:
+        ログ行のリスト
+    """
+    if _config is None:
+        return []
+
+    log_file = _config.directory / date / f"{log_type}.log"
+    if not log_file.exists():
+        return []
+
+    all_lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()
+    return all_lines[-lines:]
 
 
 def shutdown_logging() -> None:

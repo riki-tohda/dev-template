@@ -16,6 +16,7 @@ from app.services.script_executor import ScriptExecutor
 
 bp = Blueprint("apps", __name__, url_prefix="/apps")
 logger = get_logger("app")
+install_logger = get_logger("install")
 
 
 def admin_required(f):
@@ -274,7 +275,7 @@ def api_install(app_id: str):
         app.installed_at = datetime.now()
         db.update_application(app)
 
-        logger.info(
+        install_logger.info(
             "アプリをインストールしました app=%s version=%s user=%s",
             app_id,
             version,
@@ -289,7 +290,7 @@ def api_install(app_id: str):
             }
         )
     except GitHubClientError as e:
-        logger.error("インストールに失敗しました app=%s error=%s", app_id, e)
+        install_logger.error("インストールに失敗しました app=%s error=%s", app_id, e)
         return jsonify({"success": False, "message": str(e)}), 500
 
 
@@ -333,7 +334,7 @@ def api_update(app_id: str):
         # サービスを再起動
         manager.start(app_id)
 
-        logger.info(
+        install_logger.info(
             "アプリをアップデートしました app=%s version=%s user=%s",
             app_id,
             version,
@@ -348,7 +349,7 @@ def api_update(app_id: str):
             }
         )
     except GitHubClientError as e:
-        logger.error("アップデートに失敗しました app=%s error=%s", app_id, e)
+        install_logger.error("アップデートに失敗しました app=%s error=%s", app_id, e)
         return jsonify({"success": False, "message": str(e)}), 500
 
 
@@ -390,7 +391,7 @@ def api_uninstall(app_id: str):
         app.installed_at = None
         db.update_application(app)
 
-        logger.info(
+        install_logger.info(
             "アプリをアンインストールしました app=%s user=%s",
             app_id,
             current_user.username,
@@ -403,7 +404,7 @@ def api_uninstall(app_id: str):
             }
         )
     except GitHubClientError as e:
-        logger.error("アンインストールに失敗しました app=%s error=%s", app_id, e)
+        install_logger.error("アンインストールに失敗しました app=%s error=%s", app_id, e)
         return jsonify({"success": False, "message": str(e)}), 500
 
 
@@ -500,7 +501,7 @@ def api_create_script(app_id: str):
 
     db.create_app_script(script)
 
-    logger.info(
+    install_logger.info(
         "スクリプトを登録しました app=%s script=%s user=%s",
         app_id,
         script_id,
@@ -550,7 +551,7 @@ def api_update_script(app_id: str, script_id: str):
 
     db.update_app_script(script)
 
-    logger.info(
+    install_logger.info(
         "スクリプトを更新しました app=%s script=%s user=%s",
         app_id,
         script_id,
@@ -579,7 +580,7 @@ def api_delete_script(app_id: str, script_id: str):
 
     db.delete_app_script(app_id, script_id)
 
-    logger.info(
+    install_logger.info(
         "スクリプトを削除しました app=%s script=%s user=%s",
         app_id,
         script_id,
@@ -625,7 +626,7 @@ def api_execute_script(app_id: str, script_id: str):
     )
     execution_id = db.create_script_execution(execution)
 
-    logger.info(
+    install_logger.info(
         "スクリプトを実行します app=%s script=%s mode=%s user=%s",
         app_id,
         script_id,

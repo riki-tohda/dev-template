@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}ログビューア - POL Portal{% endblock %}
+
+{% block content %}
+<ul class="breadcrumb">
+    <li><a href="{{ url_for('settings.index') }}">設定</a></li>
+    <li>ログビューア</li>
+</ul>
+
+<div class="page-header">
+    <h1><i class="bi bi-file-text"></i> ログビューア</h1>
+</div>
+
+<div class="setting-section">
+    <div class="setting-section-header">
+        <i class="bi bi-funnel"></i>
+        <span>フィルター</span>
+    </div>
+    <div class="setting-section-body">
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: end;">
+            <div>
+                <label for="log-date">日付</label>
+                <select id="log-date" style="min-width: 160px;">
+                    <option value="">選択してください</option>
+                    {% for date in dates %}
+                    <option value="{{ date }}">{{ date }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="log-type">ログ種別</label>
+                <select id="log-type" style="min-width: 140px;" disabled>
+                    <option value="">日付を選択</option>
+                </select>
+            </div>
+            <div>
+                <label for="log-lines">表示行数</label>
+                <select id="log-lines" style="min-width: 100px;">
+                    <option value="100">100</option>
+                    <option value="500" selected>500</option>
+                    <option value="1000">1000</option>
+                    <option value="2000">2000</option>
+                </select>
+            </div>
+            <div>
+                <button type="button" id="btn-load" disabled>
+                    <i class="bi bi-arrow-clockwise"></i> 読み込み
+                </button>
+            </div>
+        </div>
+        <div style="margin-top: 1rem;">
+            <label for="log-search">検索</label>
+            <input type="text" id="log-search" placeholder="テキストで絞り込み..." disabled>
+        </div>
+    </div>
+</div>
+
+<div class="setting-section">
+    <div class="setting-section-header">
+        <i class="bi bi-terminal"></i>
+        <span>ログ内容</span>
+        <span id="log-info" style="margin-left: auto; font-size: 0.85em; color: var(--muted-color, #666);"></span>
+    </div>
+    <div class="setting-section-body">
+        <pre id="log-content" style="background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; max-height: 600px; overflow: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 0.85em; white-space: pre-wrap; word-wrap: break-word; margin: 0;">ログを読み込んでください</pre>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dateSelect = document.getElementById('log-date');
+    const typeSelect = document.getElementById('log-type');
+    const linesSelect = document.getElementById('log-lines');
+    const btnLoad = document.getElementById('btn-load');
+    const searchInput = document.getElementById('log-search');
+    const logContent = document.getElementById('log-content');
+    const logInfo = document.getElementById('log-info');
+
+    let allLines = [];
+
+    dateSelect.addEventListener('change', function() {
+        const date = this.value;
+        typeSelect.innerHTML = '<option value="">読み込み中...</option>';
+        typeSelect.disabled = true;
+        btnLoad.disabled = true;
+
+        if (!date) {
+            typeSelect.innerHTML = '<option value="">日付を選択</option>';
+            return;
+        }
+
+        fetch('{{ url_for("settings.logs_api_files") }}?date=' + encodeURIComponent(date))
+            .then(r => r.json())
+            .then(files => {
+                typeSelect.innerHTML = '<option value="">選択してください</option>';
+                files.forEach(f => {
+                    const opt = document.createElement('option');
+                    opt.value = f;
+                    opt.textContent = f;
+                    typeSelect.appendChild(opt);
+                });
+                typeSelect.disabled = false;
+            })
+            .catch(() => {
+                typeSelect.innerHTML = '<option value="">取得エラー</option>';
+            });
+    });
+
+    typeSelect.addEventListener('change', function() {
+        btnLoad.disabled = !this.value;
+    });
+
+    btnLoad.addEventListener('click', function() {
+        const date = dateSelect.value;
+        const type = typeSelect.value;
+        const lines = linesSelect.value;
+
+        if (!date || !type) return;
+
+        logContent.textContent = '読み込み中...';
+        logInfo.textContent = '';
+        btnLoad.disabled = true;
+
+        const url = '{{ url_for("settings.logs_api_content") }}?date=' +
+            encodeURIComponent(date) + '&type=' + encodeURIComponent(type) +
+            '&lines=' + encodeURIComponent(lines);
+
+        fetch(url)
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) {
+                    logContent.textContent = 'エラー: ' + data.error;
+                    return;
+                }
+                allLines = data.lines || [];
+                searchInput.disabled = false;
+                searchInput.value = '';
+                renderLines(allLines);
+                logInfo.textContent = data.total + ' 行';
+                logContent.scrollTop = logContent.scrollHeight;
+            })
+            .catch(() => {
+                logContent.textContent = 'ログの取得に失敗しました';
+            })
+            .finally(() => {
+                btnLoad.disabled = false;
+            });
+    });
+
+    searchInput.addEventListener('input', function() {
+        const query = this.value.trim().toLowerCase();
+        if (!query) {
+            renderLines(allLines);
+            return;
+        }
+        const filtered = allLines.filter(line => line.toLowerCase().includes(query));
+        renderLines(filtered);
+        logInfo.textContent = filtered.length + ' / ' + allLines.length + ' 行';
+    });
+
+    function renderLines(lines) {
+        if (lines.length === 0) {
+            logContent.textContent = '該当するログはありません';
+        } else {
+            logContent.textContent = lines.join('\n');
+        }
+    }
+});
+</script>
+{% endblock %}

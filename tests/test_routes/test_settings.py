@@ -1,5 +1,7 @@
 """設定管理ルートのテスト"""
 
+from datetime import datetime
+
 
 class TestSettingsAccess:
     """設定画面のアクセス制御テスト"""
@@ -474,3 +476,113 @@ class TestPasswordChange:
         )
         assert response.status_code == 200
         assert "一致しません" in response.data.decode("utf-8")
+
+
+class TestLogViewer:
+    """ログビューアのテスト"""
+
+    def test_page_display(self, admin_client):
+        """ログビューア画面が表示される"""
+        response = admin_client.get("/settings/logs")
+        assert response.status_code == 200
+        assert "ログビューア" in response.data.decode("utf-8")
+
+    def test_requires_admin(self, user_client):
+        """一般ユーザーはリダイレクトされる"""
+        response = user_client.get("/settings/logs", follow_redirects=False)
+        assert response.status_code == 302
+
+    def test_requires_login(self, client):
+        """未ログインでリダイレクトされる"""
+        response = client.get("/settings/logs", follow_redirects=False)
+        assert response.status_code == 302
+
+    def test_files_api(self, admin_client):
+        """ファイル一覧APIが応答する"""
+        today = datetime.now().strftime("%Y-%m-%d")
+        response = admin_client.get(f"/settings/logs/api/files?date={today}")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert isinstance(data, list)
+
+    def test_files_api_invalid_date(self, admin_client):
+        """不正な日付でエラーが返る"""
+        response = admin_client.get("/settings/logs/api/files?date=invalid")
+        assert response.status_code == 400
+
+    def test_content_api(self, admin_client, app):
+        """コンテンツAPIが応答する"""
+        # ログエントリを生成
+        from app.services.log_manager import get_logger
+
+        with app.app_context():
+            test_logger = get_logger("app")
+            test_logger.info("viewer test entry")
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        response = admin_client.get(
+            f"/settings/logs/api/content?date={today}&type=app&lines=100"
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "lines" in data
+        assert "total" in data
+
+    def test_content_api_missing_params(self, admin_client):
+        """パラメータ不足でエラーが返る"""
+        response = admin_client.get("/settings/logs/api/content?date=2025-01-01")
+        assert response.status_code == 400
+
+    def test_content_api_invalid_type(self, admin_client):
+        """不正なログ種別でエラーが返る"""
+        response = admin_client.get(
+            "/settings/logs/api/content?date=2025-01-01&type=../../etc"
+        )
+        assert response.status_code == 400
+
+    def test_files_api_requires_admin(self, user_client):
+        """ファイルAPIは管理者権限が必要"""
+        response = user_client.get(
+            "/settings/logs/api/files?date=2025-01-01",
+            follow_redirects=False,
+        )
+        assert response.status_code == 302
+
+    def test_content_api_requires_admin(self, user_client):
+        """コンテンツAPIは管理者権限が必要"""
+        response = user_client.get(
+            "/settings/logs/api/content?date=2025-01-01&type=app",
+            follow_redirects=False,
+        )
+        assert response.status_code == 302
+
+
+class TestAccessLogging:
+    """アクセスログのテスト"""
+
+    def test_access_log_recorded(self, admin_client, app):
+        """リクエスト後にアクセスログが記録される"""
+        # ダッシュボードにアクセス
+        admin_client.get("/")
+
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        from app.services.log_manager import read_log_tail
+
+        lines = read_log_tail(today, "access")
+        assert len(lines) > 0
+        # アクセスログにダッシュボードへのアクセスが含まれる
+        found = any("path=/" in line and "method=GET" in line for line in lines)
+        assert found
+
+    def test_static_excluded(self, admin_client, app):
+        """/static/ はアクセスログに記録されない"""
+        admin_client.get("/static/nonexistent.css")
+
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        from app.services.log_manager import read_log_tail
+
+        lines = read_log_tail(today, "access")
+        static_lines = [line for line in lines if "path=/static/" in line]
+        assert len(static_lines) == 0
