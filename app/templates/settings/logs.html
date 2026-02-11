@@ -2,6 +2,517 @@
 
 {% block title %}ログビューア - POL Portal{% endblock %}
 
+{% block head %}
+<style>
+/* --- 統計カード --- */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.stat-item {
+    background: white;
+    border-radius: 10px;
+    padding: 1rem;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    border: 1px solid var(--border-color, #e5e7eb);
+}
+
+.stat-item .stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-color, #1f2937);
+}
+
+.stat-item .stat-label {
+    font-size: 0.8rem;
+    color: var(--muted-color, #6b7280);
+    margin-top: 0.25rem;
+}
+
+.stat-item .stat-icon {
+    font-size: 1.25rem;
+    margin-bottom: 0.25rem;
+}
+
+.stat-item.stat-info .stat-icon { color: #3b82f6; }
+.stat-item.stat-warning .stat-icon { color: #f59e0b; }
+.stat-item.stat-error .stat-icon { color: #ef4444; }
+.stat-item.stat-files .stat-icon { color: #8b5cf6; }
+.stat-item.stat-size .stat-icon { color: #10b981; }
+
+/* --- 期間選択 --- */
+.filter-row {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: end;
+}
+
+.filter-row .filter-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.filter-row label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--muted-color, #6b7280);
+}
+
+.filter-row input[type="date"] {
+    min-width: 150px;
+}
+
+.quick-dates {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.75rem;
+}
+
+.quick-dates button {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+    border-radius: 20px;
+    border: 1px solid var(--border-color, #e5e7eb);
+    background: white;
+    color: var(--text-color, #374151);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.quick-dates button:hover,
+.quick-dates button.active {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+/* --- 日付グループ --- */
+.date-group {
+    margin-bottom: 1rem;
+}
+
+.date-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-gradient);
+    color: white;
+    padding: 0.6rem 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    user-select: none;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.date-header:hover {
+    opacity: 0.95;
+}
+
+.date-header .toggle-icon {
+    transition: transform 0.2s;
+}
+
+.date-header .toggle-icon.collapsed {
+    transform: rotate(-90deg);
+}
+
+.date-files {
+    padding: 0.5rem 0;
+}
+
+.file-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid var(--border-color, #f3f4f6);
+    transition: background 0.15s;
+}
+
+.file-item:hover {
+    background: rgba(79, 70, 229, 0.04);
+}
+
+.file-item:last-child {
+    border-bottom: none;
+}
+
+.file-icon {
+    font-size: 1.25rem;
+    flex-shrink: 0;
+    width: 28px;
+    text-align: center;
+}
+
+.file-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.file-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-color, #1f2937);
+}
+
+.file-meta {
+    font-size: 0.78rem;
+    color: var(--muted-color, #6b7280);
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-top: 0.15rem;
+}
+
+.file-actions {
+    display: flex;
+    gap: 0.4rem;
+    flex-shrink: 0;
+}
+
+.file-actions button,
+.file-actions a {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.78rem;
+    border-radius: 6px;
+    border: 1px solid var(--border-color, #e5e7eb);
+    background: white;
+    color: var(--primary-color);
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    transition: all 0.2s;
+}
+
+.file-actions button:hover,
+.file-actions a:hover {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+.badge-error {
+    background: #fef2f2;
+    color: #dc2626;
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.badge-warning {
+    background: #fffbeb;
+    color: #d97706;
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* --- ログビューア凡例 --- */
+.log-legend {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    font-size: 0.8rem;
+    color: var(--muted-color, #6b7280);
+    margin-bottom: 0.75rem;
+}
+
+.log-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+/* --- モーダル --- */
+dialog.log-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 92vw;
+    max-width: 1100px;
+    height: 85vh;
+    max-height: 85vh;
+    border: none;
+    border-radius: 12px;
+    padding: 0;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+dialog.log-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: var(--bg-gradient);
+    color: white;
+    flex-shrink: 0;
+}
+
+.dialog-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.dialog-header .close-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dialog-header .close-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.dialog-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+}
+
+.dialog-toolbar select,
+.dialog-toolbar input {
+    font-size: 0.82rem;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    margin: 0;
+}
+
+.dialog-toolbar input[type="text"] {
+    flex: 1;
+    min-width: 150px;
+}
+
+.dialog-toolbar a {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.82rem;
+    border-radius: 6px;
+    border: 1px solid var(--border-color, #e5e7eb);
+    background: white;
+    color: var(--primary-color);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    white-space: nowrap;
+}
+
+.dialog-toolbar a:hover {
+    background: var(--primary-color);
+    color: white;
+}
+
+/* --- ログビューア本体 --- */
+.log-viewer {
+    flex: 1;
+    overflow: auto;
+    background: #1e1e1e;
+    padding: 0.5rem 0;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.82rem;
+    line-height: 1.6;
+}
+
+.log-line {
+    display: flex;
+    gap: 0;
+    padding: 0.1rem 0.75rem;
+    border-left: 3px solid transparent;
+    white-space: nowrap;
+}
+
+.log-line:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.log-line.level-ERROR {
+    border-left-color: #ef4444;
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.log-line.level-WARNING {
+    border-left-color: #f59e0b;
+    background: rgba(245, 158, 11, 0.06);
+}
+
+.log-line.level-INFO {
+    border-left-color: #3b82f6;
+}
+
+.log-line.level-DEBUG {
+    border-left-color: #6b7280;
+}
+
+.log-line.level-ACCESS {
+    border-left-color: #10b981;
+}
+
+.log-line.hidden {
+    display: none;
+}
+
+.log-line-number {
+    color: #6b7280;
+    min-width: 40px;
+    text-align: right;
+    margin-right: 0.75rem;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.log-timestamp {
+    color: #c084fc;
+    margin-right: 0.5rem;
+    flex-shrink: 0;
+}
+
+.log-level-badge {
+    display: inline-block;
+    padding: 0 0.4rem;
+    border-radius: 3px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    margin-right: 0.5rem;
+    min-width: 55px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.log-level-badge.badge-ERROR {
+    background: #dc2626;
+    color: white;
+}
+
+.log-level-badge.badge-WARNING {
+    background: #d97706;
+    color: white;
+}
+
+.log-level-badge.badge-INFO {
+    background: #2563eb;
+    color: white;
+}
+
+.log-level-badge.badge-DEBUG {
+    background: #4b5563;
+    color: white;
+}
+
+.log-level-badge.badge-ACCESS {
+    background: #059669;
+    color: white;
+}
+
+.log-logger {
+    color: #60a5fa;
+    margin-right: 0.5rem;
+    flex-shrink: 0;
+}
+
+.log-logger::after {
+    content: ':';
+}
+
+.log-message {
+    color: #d4d4d4;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.log-raw {
+    color: #9ca3af;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.log-message mark,
+.log-raw mark {
+    background: #fbbf24;
+    color: #1e1e1e;
+    padding: 0 2px;
+    border-radius: 2px;
+}
+
+.log-empty {
+    color: #6b7280;
+    text-align: center;
+    padding: 3rem 1rem;
+    font-size: 0.9rem;
+}
+
+/* --- アーカイブ --- */
+.archive-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border-color, #f3f4f6);
+}
+
+.archive-item:last-child {
+    border-bottom: none;
+}
+
+/* --- レスポンシブ --- */
+@media (max-width: 640px) {
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .file-item {
+        flex-wrap: wrap;
+    }
+
+    .file-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    dialog.log-dialog {
+        width: 98vw;
+        height: 92vh;
+        max-height: 92vh;
+    }
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <ul class="breadcrumb">
     <li><a href="{{ url_for('settings.index') }}">設定</a></li>
@@ -12,160 +523,488 @@
     <h1><i class="bi bi-file-text"></i> ログビューア</h1>
 </div>
 
+<!-- 期間選択 -->
 <div class="setting-section">
     <div class="setting-section-header">
         <i class="bi bi-funnel"></i>
-        <span>フィルター</span>
+        <span>期間選択</span>
     </div>
     <div class="setting-section-body">
-        <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: end;">
-            <div>
-                <label for="log-date">日付</label>
-                <select id="log-date" style="min-width: 160px;">
-                    <option value="">選択してください</option>
-                    {% for date in dates %}
-                    <option value="{{ date }}">{{ date }}</option>
-                    {% endfor %}
-                </select>
+        <div class="filter-row">
+            <div class="filter-field">
+                <label for="start-date">開始日</label>
+                <input type="date" id="start-date">
             </div>
-            <div>
-                <label for="log-type">ログ種別</label>
-                <select id="log-type" style="min-width: 140px;" disabled>
-                    <option value="">日付を選択</option>
-                </select>
+            <div class="filter-field">
+                <label for="end-date">終了日</label>
+                <input type="date" id="end-date">
             </div>
-            <div>
-                <label for="log-lines">表示行数</label>
-                <select id="log-lines" style="min-width: 100px;">
-                    <option value="100">100</option>
-                    <option value="500" selected>500</option>
-                    <option value="1000">1000</option>
-                    <option value="2000">2000</option>
-                </select>
-            </div>
-            <div>
-                <button type="button" id="btn-load" disabled>
-                    <i class="bi bi-arrow-clockwise"></i> 読み込み
+            <div class="filter-field">
+                <label>&nbsp;</label>
+                <button type="button" id="btn-filter" onclick="loadLogs()">
+                    <i class="bi bi-search"></i> 絞り込み
                 </button>
             </div>
         </div>
-        <div style="margin-top: 1rem;">
-            <label for="log-search">検索</label>
-            <input type="text" id="log-search" placeholder="テキストで絞り込み..." disabled>
+        <div class="quick-dates">
+            <button type="button" onclick="setQuickDate('today')">今日</button>
+            <button type="button" onclick="setQuickDate('yesterday')">昨日</button>
+            <button type="button" onclick="setQuickDate('week')">過去7日間</button>
+            <button type="button" onclick="setQuickDate('month')">過去30日間</button>
         </div>
     </div>
 </div>
 
-<div class="setting-section">
-    <div class="setting-section-header">
-        <i class="bi bi-terminal"></i>
-        <span>ログ内容</span>
-        <span id="log-info" style="margin-left: auto; font-size: 0.85em; color: var(--muted-color, #666);"></span>
+<!-- 統計カード -->
+<div class="stats-grid" id="stats-grid">
+    <div class="stat-item stat-files">
+        <div class="stat-icon"><i class="bi bi-file-earmark"></i></div>
+        <div class="stat-value" id="stat-files">-</div>
+        <div class="stat-label">ファイル数</div>
     </div>
-    <div class="setting-section-body">
-        <pre id="log-content" style="background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; max-height: 600px; overflow: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 0.85em; white-space: pre-wrap; word-wrap: break-word; margin: 0;">ログを読み込んでください</pre>
+    <div class="stat-item stat-size">
+        <div class="stat-icon"><i class="bi bi-hdd"></i></div>
+        <div class="stat-value" id="stat-size">-</div>
+        <div class="stat-label">総容量</div>
+    </div>
+    <div class="stat-item stat-info">
+        <div class="stat-icon"><i class="bi bi-info-circle"></i></div>
+        <div class="stat-value" id="stat-info">-</div>
+        <div class="stat-label">INFO</div>
+    </div>
+    <div class="stat-item stat-warning">
+        <div class="stat-icon"><i class="bi bi-exclamation-triangle"></i></div>
+        <div class="stat-value" id="stat-warning">-</div>
+        <div class="stat-label">WARNING</div>
+    </div>
+    <div class="stat-item stat-error">
+        <div class="stat-icon"><i class="bi bi-x-circle"></i></div>
+        <div class="stat-value" id="stat-error">-</div>
+        <div class="stat-label">ERROR</div>
     </div>
 </div>
 
+<!-- ログファイル一覧 -->
+<div class="setting-section">
+    <div class="setting-section-header">
+        <i class="bi bi-folder2-open"></i>
+        <span>ログファイル一覧</span>
+    </div>
+    <div class="setting-section-body">
+        <div class="log-legend">
+            <span>📱 app</span>
+            <span>💻 resource</span>
+            <span>🔐 auth</span>
+            <span>🌐 access</span>
+            <span>📦 install</span>
+        </div>
+        <div id="file-list">
+            <p style="color: var(--muted-color, #6b7280); text-align: center; padding: 2rem 0;">
+                期間を選択して「絞り込み」を押してください
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- アーカイブ -->
+<div class="setting-section" id="archive-section" style="display: none;">
+    <div class="setting-section-header">
+        <i class="bi bi-archive"></i>
+        <span>アーカイブ</span>
+    </div>
+    <div class="setting-section-body">
+        <div id="archive-list"></div>
+    </div>
+</div>
+
+<!-- ログビューアモーダル -->
+<dialog class="log-dialog" id="log-dialog">
+    <div class="dialog-header">
+        <h3 id="dialog-title"><i class="bi bi-terminal"></i> ログビューア</h3>
+        <button class="close-btn" onclick="document.getElementById('log-dialog').close()" title="閉じる">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </div>
+    <div class="dialog-toolbar">
+        <select id="viewer-level-filter" onchange="filterLogLines()">
+            <option value="all">すべて</option>
+            <option value="INFO">INFO</option>
+            <option value="WARNING">WARNING</option>
+            <option value="ERROR">ERROR</option>
+            <option value="DEBUG">DEBUG</option>
+            <option value="ACCESS">ACCESS</option>
+        </select>
+        <input type="text" id="viewer-search" placeholder="キーワード検索..." oninput="filterLogLines()">
+        <a id="viewer-download" href="#" target="_blank">
+            <i class="bi bi-download"></i> DL
+        </a>
+    </div>
+    <div class="log-viewer" id="log-viewer">
+        <div class="log-empty">ログを読み込んでいます...</div>
+    </div>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const dateSelect = document.getElementById('log-date');
-    const typeSelect = document.getElementById('log-type');
-    const linesSelect = document.getElementById('log-lines');
-    const btnLoad = document.getElementById('btn-load');
-    const searchInput = document.getElementById('log-search');
-    const logContent = document.getElementById('log-content');
-    const logInfo = document.getElementById('log-info');
+(function() {
+    const LOG_TYPE_ICONS = {
+        app: '📱', resource: '💻', auth: '🔐', access: '🌐', install: '📦'
+    };
 
-    let allLines = [];
+    let allLogEntries = [];
 
-    dateSelect.addEventListener('change', function() {
-        const date = this.value;
-        typeSelect.innerHTML = '<option value="">読み込み中...</option>';
-        typeSelect.disabled = true;
-        btnLoad.disabled = true;
+    // --- 初期化 ---
+    document.addEventListener('DOMContentLoaded', function() {
+        setQuickDate('today');
+    });
 
-        if (!date) {
-            typeSelect.innerHTML = '<option value="">日付を選択</option>';
-            return;
+    // --- 日付プリセット ---
+    window.setQuickDate = function(type) {
+        const today = new Date();
+        const fmt = d => d.toISOString().slice(0, 10);
+        let start, end;
+
+        switch (type) {
+            case 'today':
+                start = end = fmt(today);
+                break;
+            case 'yesterday': {
+                const y = new Date(today);
+                y.setDate(y.getDate() - 1);
+                start = end = fmt(y);
+                break;
+            }
+            case 'week': {
+                const w = new Date(today);
+                w.setDate(w.getDate() - 6);
+                start = fmt(w);
+                end = fmt(today);
+                break;
+            }
+            case 'month': {
+                const m = new Date(today);
+                m.setDate(m.getDate() - 29);
+                start = fmt(m);
+                end = fmt(today);
+                break;
+            }
         }
 
-        fetch('{{ url_for("settings.logs_api_files") }}?date=' + encodeURIComponent(date))
+        document.getElementById('start-date').value = start;
+        document.getElementById('end-date').value = end;
+
+        // アクティブ状態更新
+        document.querySelectorAll('.quick-dates button').forEach(btn => btn.classList.remove('active'));
+        event.target.classList.add('active');
+
+        loadLogs();
+    };
+
+    // --- ログ読み込み ---
+    window.loadLogs = function() {
+        const startDate = document.getElementById('start-date').value;
+        const endDate = document.getElementById('end-date').value;
+
+        if (!startDate || !endDate) return;
+
+        // 統計の読み込み
+        fetch(`{{ url_for("settings.logs_api_statistics") }}?start=${startDate}&end=${endDate}`)
             .then(r => r.json())
-            .then(files => {
-                typeSelect.innerHTML = '<option value="">選択してください</option>';
-                files.forEach(f => {
-                    const opt = document.createElement('option');
-                    opt.value = f;
-                    opt.textContent = f;
-                    typeSelect.appendChild(opt);
-                });
-                typeSelect.disabled = false;
+            .then(stats => {
+                document.getElementById('stat-files').textContent = stats.total_files.toLocaleString();
+                document.getElementById('stat-size').textContent = formatBytes(stats.total_size_bytes);
+                document.getElementById('stat-info').textContent = stats.info_count.toLocaleString();
+                document.getElementById('stat-warning').textContent = stats.warning_count.toLocaleString();
+                document.getElementById('stat-error').textContent = stats.error_count.toLocaleString();
             })
             .catch(() => {
-                typeSelect.innerHTML = '<option value="">取得エラー</option>';
+                ['stat-files','stat-size','stat-info','stat-warning','stat-error'].forEach(id => {
+                    document.getElementById(id).textContent = '-';
+                });
             });
-    });
 
-    typeSelect.addEventListener('change', function() {
-        btnLoad.disabled = !this.value;
-    });
+        // ファイル一覧の読み込み (各日付ごと)
+        loadFileList(startDate, endDate);
 
-    btnLoad.addEventListener('click', function() {
-        const date = dateSelect.value;
-        const type = typeSelect.value;
-        const lines = linesSelect.value;
+        // アーカイブの読み込み
+        loadArchives();
+    };
 
-        if (!date || !type) return;
+    function loadFileList(startDate, endDate) {
+        const fileListEl = document.getElementById('file-list');
+        fileListEl.innerHTML = '<p style="color: var(--muted-color); text-align: center; padding: 1rem;">読み込み中...</p>';
 
-        logContent.textContent = '読み込み中...';
-        logInfo.textContent = '';
-        btnLoad.disabled = true;
+        // 日付範囲を生成
+        const dates = [];
+        const start = new Date(startDate + 'T00:00:00');
+        const end = new Date(endDate + 'T00:00:00');
+        for (let d = new Date(end); d >= start; d.setDate(d.getDate() - 1)) {
+            dates.push(d.toISOString().slice(0, 10));
+        }
 
-        const url = '{{ url_for("settings.logs_api_content") }}?date=' +
-            encodeURIComponent(date) + '&type=' + encodeURIComponent(type) +
-            '&lines=' + encodeURIComponent(lines);
+        // 全日付のファイルメタデータを取得
+        const promises = dates.map(date =>
+            fetch(`{{ url_for("settings.logs_api_files_metadata") }}?date=${date}`)
+                .then(r => r.json())
+                .then(files => ({ date, files }))
+                .catch(() => ({ date, files: [] }))
+        );
 
-        fetch(url)
+        Promise.all(promises).then(results => {
+            const nonEmpty = results.filter(r => r.files.length > 0);
+
+            if (nonEmpty.length === 0) {
+                fileListEl.innerHTML = '<p style="color: var(--muted-color); text-align: center; padding: 2rem 0;">該当するログファイルはありません</p>';
+                return;
+            }
+
+            let html = '';
+            nonEmpty.forEach(({ date, files }) => {
+                const totalErrors = files.reduce((s, f) => s + (f.error_count || 0), 0);
+                const totalWarnings = files.reduce((s, f) => s + (f.warning_count || 0), 0);
+
+                let badgeHtml = '';
+                if (totalErrors > 0) badgeHtml += `<span class="badge-error">${totalErrors} ERROR</span> `;
+                if (totalWarnings > 0) badgeHtml += `<span class="badge-warning">${totalWarnings} WARN</span>`;
+
+                html += `<div class="date-group">`;
+                html += `<div class="date-header" onclick="toggleDateGroup('${date}')">`;
+                html += `<span><i class="bi bi-calendar3"></i> ${date} (${files.length}ファイル) ${badgeHtml}</span>`;
+                html += `<i class="bi bi-chevron-down toggle-icon" id="toggle-${date}"></i>`;
+                html += `</div>`;
+                html += `<div class="date-files" id="files-${date}">`;
+
+                files.forEach(file => {
+                    const icon = LOG_TYPE_ICONS[file.type] || '📄';
+                    let badges = '';
+                    if (file.error_count > 0) badges += `<span class="badge-error">${file.error_count} ERROR</span> `;
+                    if (file.warning_count > 0) badges += `<span class="badge-warning">${file.warning_count} WARN</span> `;
+
+                    html += `<div class="file-item">`;
+                    html += `<span class="file-icon">${icon}</span>`;
+                    html += `<div class="file-info">`;
+                    html += `<div class="file-name">${file.name} ${badges}</div>`;
+                    html += `<div class="file-meta">`;
+                    html += `<span>${formatBytes(file.size_bytes)}</span>`;
+                    html += `<span>${file.line_count.toLocaleString()} 行</span>`;
+                    html += `</div>`;
+                    html += `</div>`;
+                    html += `<div class="file-actions">`;
+                    html += `<button onclick="viewLog('${date}', '${file.type}')"><i class="bi bi-eye"></i> 表示</button>`;
+                    html += `<a href="{{ url_for('settings.logs_api_download', date='__DATE__', log_type='__TYPE__') }}".replace('__DATE__', '${date}').replace('__TYPE__', '${file.type}')><i class="bi bi-download"></i></a>`;
+                    html += `</div>`;
+                    html += `</div>`;
+                });
+
+                html += `</div></div>`;
+            });
+
+            fileListEl.innerHTML = html;
+        });
+    }
+
+    function loadArchives() {
+        fetch('{{ url_for("settings.logs_api_archives") }}')
+            .then(r => r.json())
+            .then(archives => {
+                const section = document.getElementById('archive-section');
+                const listEl = document.getElementById('archive-list');
+
+                if (archives.length === 0) {
+                    section.style.display = 'none';
+                    return;
+                }
+
+                section.style.display = '';
+                let html = '';
+                archives.forEach(a => {
+                    html += `<div class="archive-item">`;
+                    html += `<span class="file-icon"><i class="bi bi-file-zip"></i></span>`;
+                    html += `<div class="file-info">`;
+                    html += `<div class="file-name">${a.filename}</div>`;
+                    html += `<div class="file-meta"><span>${formatBytes(a.size_bytes)}</span></div>`;
+                    html += `</div>`;
+                    html += `<div class="file-actions">`;
+                    html += `<a href="{{ url_for('settings.logs_api_download_archive', filename='__FN__') }}".replace('__FN__', '${a.filename}')><i class="bi bi-download"></i> DL</a>`;
+                    html += `</div>`;
+                    html += `</div>`;
+                });
+                listEl.innerHTML = html;
+            })
+            .catch(() => {
+                document.getElementById('archive-section').style.display = 'none';
+            });
+    }
+
+    // --- 日付グループ折りたたみ ---
+    window.toggleDateGroup = function(date) {
+        const files = document.getElementById('files-' + date);
+        const icon = document.getElementById('toggle-' + date);
+
+        if (files.style.display === 'none') {
+            files.style.display = '';
+            icon.classList.remove('collapsed');
+        } else {
+            files.style.display = 'none';
+            icon.classList.add('collapsed');
+        }
+    };
+
+    // --- ログ表示 ---
+    window.viewLog = function(date, type) {
+        const dialog = document.getElementById('log-dialog');
+        const viewer = document.getElementById('log-viewer');
+        const title = document.getElementById('dialog-title');
+        const downloadLink = document.getElementById('viewer-download');
+
+        title.innerHTML = `<i class="bi bi-terminal"></i> ${date} / ${type}.log`;
+        downloadLink.href = `{{ url_for('settings.logs_api_download', date='__DATE__', log_type='__TYPE__') }}`.replace('__DATE__', date).replace('__TYPE__', type);
+        viewer.innerHTML = '<div class="log-empty">読み込み中...</div>';
+
+        // フィルタリセット
+        document.getElementById('viewer-level-filter').value = 'all';
+        document.getElementById('viewer-search').value = '';
+
+        dialog.showModal();
+
+        fetch(`{{ url_for("settings.logs_api_content_structured") }}?date=${date}&type=${type}&lines=2000`)
             .then(r => r.json())
             .then(data => {
                 if (data.error) {
-                    logContent.textContent = 'エラー: ' + data.error;
+                    viewer.innerHTML = `<div class="log-empty">エラー: ${data.error}</div>`;
                     return;
                 }
-                allLines = data.lines || [];
-                searchInput.disabled = false;
-                searchInput.value = '';
-                renderLines(allLines);
-                logInfo.textContent = data.total + ' 行';
-                logContent.scrollTop = logContent.scrollHeight;
+
+                allLogEntries = data.entries || [];
+
+                if (allLogEntries.length === 0) {
+                    viewer.innerHTML = '<div class="log-empty">ログエントリはありません</div>';
+                    return;
+                }
+
+                renderLogViewer();
             })
             .catch(() => {
-                logContent.textContent = 'ログの取得に失敗しました';
-            })
-            .finally(() => {
-                btnLoad.disabled = false;
+                viewer.innerHTML = '<div class="log-empty">ログの取得に失敗しました</div>';
             });
-    });
+    };
 
-    searchInput.addEventListener('input', function() {
-        const query = this.value.trim().toLowerCase();
-        if (!query) {
-            renderLines(allLines);
-            return;
-        }
-        const filtered = allLines.filter(line => line.toLowerCase().includes(query));
-        renderLines(filtered);
-        logInfo.textContent = filtered.length + ' / ' + allLines.length + ' 行';
-    });
+    function renderLogViewer() {
+        const viewer = document.getElementById('log-viewer');
+        let html = '';
 
-    function renderLines(lines) {
-        if (lines.length === 0) {
-            logContent.textContent = '該当するログはありません';
-        } else {
-            logContent.textContent = lines.join('\n');
-        }
+        allLogEntries.forEach(entry => {
+            html += renderLogLine(entry);
+        });
+
+        viewer.innerHTML = html;
+        viewer.scrollTop = viewer.scrollHeight;
     }
-});
+
+    function renderLogLine(entry) {
+        const levelClass = entry.level ? `level-${entry.level}` : '';
+
+        if (!entry.timestamp) {
+            // パース失敗行
+            return `<div class="log-line ${levelClass}" data-level="${entry.level || ''}">`
+                + `<span class="log-line-number">${entry.line_number}</span>`
+                + `<span class="log-raw">${escapeHtml(entry.raw)}</span>`
+                + `</div>`;
+        }
+
+        let badgeClass = entry.level ? `badge-${entry.level}` : '';
+
+        return `<div class="log-line ${levelClass}" data-level="${entry.level || ''}">`
+            + `<span class="log-line-number">${entry.line_number}</span>`
+            + `<span class="log-timestamp">${entry.timestamp}</span>`
+            + `<span class="log-level-badge ${badgeClass}">${entry.level || ''}</span>`
+            + (entry.logger && entry.level !== 'ACCESS' ? `<span class="log-logger">${escapeHtml(entry.logger)}</span>` : '')
+            + `<span class="log-message">${escapeHtml(entry.message)}</span>`
+            + `</div>`;
+    }
+
+    // --- フィルタ ---
+    window.filterLogLines = function() {
+        const level = document.getElementById('viewer-level-filter').value;
+        const search = document.getElementById('viewer-search').value.trim().toLowerCase();
+
+        const lines = document.querySelectorAll('#log-viewer .log-line');
+
+        lines.forEach(line => {
+            const lineLevel = line.getAttribute('data-level') || '';
+            let show = true;
+
+            // レベルフィルタ
+            if (level !== 'all' && lineLevel !== level) {
+                show = false;
+            }
+
+            // キーワード検索
+            if (show && search) {
+                const text = line.textContent.toLowerCase();
+                if (!text.includes(search)) {
+                    show = false;
+                }
+            }
+
+            line.classList.toggle('hidden', !show);
+        });
+
+        // 検索ハイライト
+        if (search) {
+            highlightSearch(search);
+        } else {
+            clearHighlights();
+        }
+    };
+
+    function highlightSearch(query) {
+        clearHighlights();
+
+        const msgs = document.querySelectorAll('#log-viewer .log-message, #log-viewer .log-raw');
+        const re = new RegExp(`(${escapeRegExp(query)})`, 'gi');
+
+        msgs.forEach(el => {
+            if (el.closest('.hidden')) return;
+            const text = el.textContent;
+            if (re.test(text)) {
+                el.innerHTML = escapeHtml(text).replace(re, '<mark>$1</mark>');
+            }
+        });
+    }
+
+    function clearHighlights() {
+        document.querySelectorAll('#log-viewer mark').forEach(mark => {
+            const parent = mark.parentNode;
+            parent.replaceChild(document.createTextNode(mark.textContent), mark);
+            parent.normalize();
+        });
+    }
+
+    // --- ユーティリティ ---
+    function formatBytes(bytes) {
+        if (bytes === 0) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let i = 0;
+        let val = bytes;
+        while (val >= 1024 && i < units.length - 1) {
+            val /= 1024;
+            i++;
+        }
+        return val.toFixed(1) + ' ' + units[i];
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function escapeRegExp(str) {
+        return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    // ESCキーでモーダルを閉じる（dialog はデフォルトでESCをサポート）
+})();
 </script>
 {% endblock %}

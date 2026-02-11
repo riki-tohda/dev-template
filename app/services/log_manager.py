@@ -15,6 +15,7 @@
 """
 
 import logging
+import re
 import shutil
 import tarfile
 import threading
@@ -639,6 +640,270 @@ def read_log_tail(date: str, log_type: str, lines: int = 500) -> list[str]:
 
     all_lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()
     return all_lines[-lines:]
+
+
+def get_log_file_metadata(date: str, log_type: str) -> dict | None:
+    """ログファイルのメタデータを取得する。
+
+    Args:
+        date: 日付文字列（YYYY-MM-DD）
+        log_type: ログ種別
+
+    Returns:
+        メタデータ辞書。ファイルが存在しなければ None。
+    """
+    if _config is None:
+        return None
+
+    log_file = _config.directory / date / f"{log_type}.log"
+    if not log_file.exists():
+        return None
+
+    stat = log_file.stat()
+    content = log_file.read_text(encoding="utf-8", errors="replace")
+    lines = content.splitlines()
+
+    error_count = 0
+    warning_count = 0
+    if log_type != "access":
+        for line in lines:
+            if "[ERROR]" in line:
+                error_count += 1
+            elif "[WARNING]" in line:
+                warning_count += 1
+
+    return {
+        "size_bytes": stat.st_size,
+        "line_count": len(lines),
+        "error_count": error_count,
+        "warning_count": warning_count,
+        "modified_time": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+    }
+
+
+def list_log_files_with_metadata(date: str) -> list[dict]:
+    """指定日付のログファイル一覧をメタデータ付きで取得する。
+
+    Args:
+        date: 日付文字列（YYYY-MM-DD）
+
+    Returns:
+        メタデータ付きファイル情報のリスト
+    """
+    files = list_log_files(date)
+    result = []
+    for log_type in files:
+        meta = get_log_file_metadata(date, log_type)
+        if meta is not None:
+            result.append({
+                "type": log_type,
+                "name": f"{log_type}.log",
+                **meta,
+            })
+    return result
+
+
+def get_date_range_statistics(start_date: str, end_date: str) -> dict:
+    """日付範囲内のログ統計情報を取得する。
+
+    Args:
+        start_date: 開始日付（YYYY-MM-DD）
+        end_date: 終了日付（YYYY-MM-DD）
+
+    Returns:
+        統計情報の辞書
+    """
+    if _config is None or not _config.directory.exists():
+        return {
+            "total_size_bytes": 0,
+            "total_files": 0,
+            "info_count": 0,
+            "warning_count": 0,
+            "error_count": 0,
+        }
+
+    total_size = 0
+    total_files = 0
+    info_count = 0
+    warning_count = 0
+    error_count = 0
+
+    try:
+        start = datetime.strptime(start_date, "%Y-%m-%d")
+        end = datetime.strptime(end_date, "%Y-%m-%d")
+    except ValueError:
+        return {
+            "total_size_bytes": 0,
+            "total_files": 0,
+            "info_count": 0,
+            "warning_count": 0,
+            "error_count": 0,
+        }
+
+    for item in _config.directory.iterdir():
+        if not item.is_dir():
+            continue
+        try:
+            dir_date = datetime.strptime(item.name, "%Y-%m-%d")
+        except ValueError:
+            continue
+
+        if start <= dir_date <= end:
+            for log_file in item.glob("*.log"):
+                total_files += 1
+                total_size += log_file.stat().st_size
+                content = log_file.read_text(encoding="utf-8", errors="replace")
+                for line in content.splitlines():
+                    if "[INFO]" in line:
+                        info_count += 1
+                    elif "[WARNING]" in line:
+                        warning_count += 1
+                    elif "[ERROR]" in line:
+                        error_count += 1
+
+    return {
+        "total_size_bytes": total_size,
+        "total_files": total_files,
+        "info_count": info_count,
+        "warning_count": warning_count,
+        "error_count": error_count,
+    }
+
+
+def list_archive_files() -> list[dict]:
+    """アーカイブファイル一覧を取得する（降順）。
+
+    Returns:
+        アーカイブ情報のリスト
+    """
+    if _config is None:
+        return []
+
+    archive_dir = _config.directory / "archive"
+    if not archive_dir.exists():
+        return []
+
+    archives = []
+    for archive_file in archive_dir.glob("*.tar.gz"):
+        date_str = archive_file.stem.replace(".tar", "")
+        stat = archive_file.stat()
+        archives.append({
+            "filename": archive_file.name,
+            "date": date_str,
+            "size_bytes": stat.st_size,
+            "modified_time": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+        })
+
+    return sorted(archives, key=lambda x: x["date"], reverse=True)
+
+
+# ログ行パース用正規表現
+_STANDARD_LOG_PATTERN = re.compile(
+    r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) \[(\w+)\] ([\w.]+): (.+)$"
+)
+_ACCESS_LOG_PATTERN = re.compile(
+    r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) (.+)$"
+)
+
+
+def read_log_with_levels(
+    date: str, log_type: str, lines: int = 500
+) -> list[dict]:
+    """ログファイルをレベル情報付きで取得する。
+
+    Args:
+        date: 日付文字列（YYYY-MM-DD）
+        log_type: ログ種別
+        lines: 取得する行数
+
+    Returns:
+        パース済みログ行のリスト
+    """
+    raw_lines = read_log_tail(date, log_type, lines)
+    result = []
+
+    for i, raw in enumerate(raw_lines, start=1):
+        if log_type == "access":
+            m = _ACCESS_LOG_PATTERN.match(raw)
+            if m:
+                result.append({
+                    "line_number": i,
+                    "timestamp": m.group(1),
+                    "level": "ACCESS",
+                    "logger": "access",
+                    "message": m.group(2),
+                    "raw": raw,
+                })
+            else:
+                result.append({
+                    "line_number": i,
+                    "timestamp": None,
+                    "level": None,
+                    "logger": None,
+                    "message": None,
+                    "raw": raw,
+                })
+        else:
+            m = _STANDARD_LOG_PATTERN.match(raw)
+            if m:
+                result.append({
+                    "line_number": i,
+                    "timestamp": m.group(1),
+                    "level": m.group(2),
+                    "logger": m.group(3),
+                    "message": m.group(4),
+                    "raw": raw,
+                })
+            else:
+                result.append({
+                    "line_number": i,
+                    "timestamp": None,
+                    "level": None,
+                    "logger": None,
+                    "message": None,
+                    "raw": raw,
+                })
+
+    return result
+
+
+def get_log_file_path(date: str, log_type: str) -> Path | None:
+    """ログファイルのパスを取得する。
+
+    Args:
+        date: 日付文字列（YYYY-MM-DD）
+        log_type: ログ種別
+
+    Returns:
+        ファイルパス。存在しなければ None。
+    """
+    if _config is None:
+        return None
+
+    log_file = _config.directory / date / f"{log_type}.log"
+    if not log_file.exists():
+        return None
+
+    return log_file
+
+
+def get_archive_file_path(filename: str) -> Path | None:
+    """アーカイブファイルのパスを取得する。
+
+    Args:
+        filename: アーカイブファイル名
+
+    Returns:
+        ファイルパス。存在しなければ None。
+    """
+    if _config is None:
+        return None
+
+    archive_file = _config.directory / "archive" / filename
+    if not archive_file.exists():
+        return None
+
+    return archive_file
 
 
 def shutdown_logging() -> None:

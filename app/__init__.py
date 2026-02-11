@@ -96,6 +96,22 @@ def create_app(
     # アクセスログミドルウェアの登録
     _register_access_logging(app)
 
+    # テンプレートフィルター
+    @app.template_filter("format_number")
+    def format_number_filter(value: int | float) -> str:
+        """数値をカンマ区切りでフォーマットする。"""
+        return f"{int(value):,}"
+
+    @app.template_filter("format_bytes")
+    def format_bytes_filter(value: int | float) -> str:
+        """バイト数を適切な単位でフォーマットする。"""
+        v = float(value)
+        for unit in ("B", "KB", "MB", "GB"):
+            if v < 1024 or unit == "GB":
+                return f"{v:.1f} {unit}"
+            v /= 1024
+        return f"{v:.1f} GB"
+
     return app
 
 
