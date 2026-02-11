@@ -52,10 +52,16 @@
                 </a>
                 {% if current_user.is_authenticated and current_user.is_admin %}
                 <a href="{{ url_for('settings.index') }}"
-                   class="nav-item {{ 'active' if request.blueprint == 'settings' }}"
+                   class="nav-item {{ 'active' if request.blueprint == 'settings' and request.endpoint != 'settings.logs' }}"
                    title="設定">
                     <i class="bi bi-gear"></i>
                     <span>設定</span>
+                </a>
+                <a href="{{ url_for('settings.logs') }}"
+                   class="nav-item {{ 'active' if request.endpoint == 'settings.logs' }}"
+                   title="ログ">
+                    <i class="bi bi-file-text"></i>
+                    <span>ログ</span>
                 </a>
                 {% endif %}
             </div>

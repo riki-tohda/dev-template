@@ -2,6 +2,8 @@
 
 from functools import wraps
 
+import re
+
 import bcrypt
 from flask import (
     Blueprint,
@@ -11,6 +13,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_file,
     url_for,
 )
 from flask_login import current_user, login_required
@@ -468,6 +471,176 @@ def logging_maintenance():
         current_user.username,
     )
     return jsonify(result)
+
+
+# --- ログビューア ---
+
+_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_LOG_TYPE_PATTERN = re.compile(r"^[a-z]+$")
+
+
+@bp.route("/logs")
+@admin_required
+def logs():
+    """ログビューア画面を表示する。"""
+    from app.services.log_manager import list_log_dates
+
+    dates = list_log_dates()
+    return render_template("settings/logs.html", dates=dates)
+
+
+@bp.route("/logs/api/files")
+@admin_required
+def logs_api_files():
+    """指定日付のログファイル一覧を返す。"""
+    from app.services.log_manager import list_log_files
+
+    date = request.args.get("date", "")
+    if not _DATE_PATTERN.match(date):
+        return jsonify({"error": "日付形式が不正です（YYYY-MM-DD）"}), 400
+
+    files = list_log_files(date)
+    return jsonify(files)
+
+
+@bp.route("/logs/api/content")
+@admin_required
+def logs_api_content():
+    """ログファイルの内容を返す。"""
+    from app.services.log_manager import read_log_tail
+
+    date = request.args.get("date", "")
+    log_type = request.args.get("type", "")
+    lines = request.args.get("lines", "500")
+
+    if not _DATE_PATTERN.match(date):
+        return jsonify({"error": "日付形式が不正です（YYYY-MM-DD）"}), 400
+
+    if not log_type or not _LOG_TYPE_PATTERN.match(log_type):
+        return jsonify({"error": "ログ種別が不正です"}), 400
+
+    try:
+        lines_int = int(lines)
+        if lines_int < 1 or lines_int > 10000:
+            raise ValueError
+    except (ValueError, TypeError):
+        return jsonify({"error": "行数が不正です"}), 400
+
+    content = read_log_tail(date, log_type, lines_int)
+    return jsonify({"lines": content, "total": len(content)})
+
+
+_ARCHIVE_FILENAME_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}\.tar\.gz$")
+
+
+@bp.route("/logs/api/files-metadata")
+@admin_required
+def logs_api_files_metadata():
+    """メタデータ付きログファイル一覧を返す。"""
+    from app.services.log_manager import list_log_files_with_metadata
+
+    date = request.args.get("date", "")
+    if not _DATE_PATTERN.match(date):
+        return jsonify({"error": "日付形式が不正です（YYYY-MM-DD）"}), 400
+
+    files = list_log_files_with_metadata(date)
+    return jsonify(files)
+
+
+@bp.route("/logs/api/statistics")
+@admin_required
+def logs_api_statistics():
+    """日付範囲内のログ統計情報を返す。"""
+    from app.services.log_manager import get_date_range_statistics
+
+    start = request.args.get("start", "")
+    end = request.args.get("end", "")
+
+    if not _DATE_PATTERN.match(start) or not _DATE_PATTERN.match(end):
+        return jsonify({"error": "日付形式が不正です（YYYY-MM-DD）"}), 400
+
+    stats = get_date_range_statistics(start, end)
+    return jsonify(stats)
+
+
+@bp.route("/logs/api/archives")
+@admin_required
+def logs_api_archives():
+    """アーカイブファイル一覧を返す。"""
+    from app.services.log_manager import list_archive_files
+
+    archives = list_archive_files()
+    return jsonify(archives)
+
+
+@bp.route("/logs/api/content-structured")
+@admin_required
+def logs_api_content_structured():
+    """構造化ログ内容を返す。"""
+    from app.services.log_manager import read_log_with_levels
+
+    date = request.args.get("date", "")
+    log_type = request.args.get("type", "")
+    lines = request.args.get("lines", "500")
+
+    if not _DATE_PATTERN.match(date):
+        return jsonify({"error": "日付形式が不正です（YYYY-MM-DD）"}), 400
+
+    if not log_type or not _LOG_TYPE_PATTERN.match(log_type):
+        return jsonify({"error": "ログ種別が不正です"}), 400
+
+    try:
+        lines_int = int(lines)
+        if lines_int < 1 or lines_int > 10000:
+            raise ValueError
+    except (ValueError, TypeError):
+        return jsonify({"error": "行数が不正です"}), 400
+
+    content = read_log_with_levels(date, log_type, lines_int)
+    return jsonify({"entries": content, "total": len(content)})
+
+
+@bp.route("/logs/api/download/<date>/<log_type>")
+@admin_required
+def logs_api_download(date: str, log_type: str):
+    """ログファイルをダウンロードする。"""
+    from app.services.log_manager import get_log_file_path
+
+    if not _DATE_PATTERN.match(date):
+        return jsonify({"error": "日付形式が不正です"}), 400
+
+    if not _LOG_TYPE_PATTERN.match(log_type):
+        return jsonify({"error": "ログ種別が不正です"}), 400
+
+    file_path = get_log_file_path(date, log_type)
+    if file_path is None:
+        return jsonify({"error": "ファイルが見つかりません"}), 404
+
+    return send_file(
+        file_path,
+        as_attachment=True,
+        download_name=f"{date}_{log_type}.log",
+    )
+
+
+@bp.route("/logs/api/download-archive/<filename>")
+@admin_required
+def logs_api_download_archive(filename: str):
+    """アーカイブファイルをダウンロードする。"""
+    from app.services.log_manager import get_archive_file_path
+
+    if not _ARCHIVE_FILENAME_PATTERN.match(filename):
+        return jsonify({"error": "ファイル名が不正です"}), 400
+
+    file_path = get_archive_file_path(filename)
+    if file_path is None:
+        return jsonify({"error": "ファイルが見つかりません"}), 404
+
+    return send_file(
+        file_path,
+        as_attachment=True,
+        download_name=filename,
+    )
 
 
 # --- プロファイル（全ユーザー共通） ---
